@@ -217,14 +217,12 @@ class KickBot:
         if content in self.handled_messages:
             message_func = self.handled_messages[content]
             await message_func(self, message)
-            logger.info(f"Handled Message: {content!r} from user {message.sender.username} ({message.sender.user_id}) | "
-                        f"Called Function: '{message_func.__name__}'")
+            logger.info(f"Handled Message: {content!r} from user {message.sender.username} ({message.sender.user_id})")
 
         elif command in self.handled_commands:
             command_func = self.handled_commands[command]
             await command_func(self, message)
-            logger.info(f"Handled Command: {command!r} from user {message.sender.username} ({message.sender.user_id}) | "
-                        f"Called Function: '{command_func.__name__}'")
+            logger.info(f"Handled Command: {command!r} from user {message.sender.username} ({message.sender.user_id})")
 
     async def _join_chatroom(self, chatroom_id: int) -> None:
         """
