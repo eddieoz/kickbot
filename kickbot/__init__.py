@@ -4,7 +4,7 @@ import sys
 from .kick_bot import KickBot
 from .kick_message import KickMessage
 
-time_format = "%Y-%m-%d %I:%M %p"
+time_format = "%Y-%m-%d %I:%M.%S %p"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)

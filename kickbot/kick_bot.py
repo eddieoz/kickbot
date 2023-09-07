@@ -72,7 +72,7 @@ class KickBot:
         get_bot_settings(self)
         if self.is_mod:
             self.moderator = Moderator(self)
-            logger.info(f"Bot is confirmed as a moderator for {self.streamer_name}")
+            logger.info(f"Bot is confirmed as a moderator for {self.streamer_name}...")
         else:
             logger.warning("Bot is not a moderator in the stream. To access moderator functions, make the bot a mod."
                            "(You can still send messages and reply's, bot moderator status is recommended)")
@@ -246,7 +246,7 @@ class KickBot:
         if connection_response.get('event') != 'pusher:connection_established':
             raise Exception('Error establishing connection to socket.')
         self._socket_id = json.loads(connection_response.get('data')).get('socket_id')
-        logger.info(f"Successfully Connected to socket... Socket ID: {self._socket_id}")
+        logger.info(f"Successfully Connected to socket...")
 
     async def _run_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
@@ -258,7 +258,7 @@ class KickBot:
         while self._is_active:
             await asyncio.sleep(frequency_time.total_seconds())
             await timed_function(self)
-            logger.info(f"Timed Event | Called Function: {timed_function}")
+            logger.info(f"Timed Event Called")
 
     async def _send(self, command: dict) -> None:
         """

@@ -14,6 +14,7 @@
 - [Streamer / Chat information](#streamer-and-chat-information)
 - [Chat Moderation](#chat-moderation)
 - [Timed event functions](#timed-events)
+- [User Interface](https://github.com/lukemvc/kickbotui)
 
 
 ---
@@ -26,6 +27,10 @@ authentication for the bot to be able to log in and handle commands / messages.
 
 It is reccomended to add the bot user as a moderator for your stream. 
 This will also give you access to additional [moderator functions](#chat-moderation).
+
+There is also a user-interface version availible at [kickbotui](https://github.com/lukemvc/kickbotui)
+
+
 ## Installation
 ```console
 pip install kickbot
