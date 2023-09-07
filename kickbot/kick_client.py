@@ -6,7 +6,6 @@ from typing import Optional
 from requests.cookies import RequestsCookieJar
 
 from .constants import BASE_HEADERS, KickAuthException
-from .selenium_help import get_cookies_and_tokens_via_selenium
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +32,7 @@ class KickClient:
         """
         Main function to authenticate the user bot.
 
-        Attempts to retrieve tokens and cookies from /kick-token-provider with self.scraper (tls-client),
-        but will user undetected_chromedriver in the case of it failing cloudflare (it normally doesn't).
-
-        In the case on it failing cloudflare, it will parse the tokens and cookies via chromedriver,
-        then send the login post with the scraper over http with self.scraper (tls_client).
-        The cf_clearence cookie from chromedriver will bypass cloudflare blocking again.
+        Retrieves tokens and cookies from /kick-token-provider with self.scraper (tls-client),
         """
         logger.info("Logging user-bot in...")
         try:
@@ -47,12 +41,9 @@ class KickClient:
             self.cookies = initial_token_response.cookies
             self.xsrf = initial_token_response.cookies['XSRF-TOKEN']
 
-        except (requests.exceptions.HTTPError, requests.exceptions.JSONDecodeError):
-            logger.info("Cloudflare Block. Getting tokens and cookies with chromedriver...")
-            token_data, cookies = get_cookies_and_tokens_via_selenium()
-            logger.info("Done retrieving data via selenium")
-            self.cookies = cookies
-            self.xsrf = cookies['XSRF-TOKEN']
+        except (requests.exceptions.HTTPError, requests.exceptions.JSONDecodeError) as e:
+            logger.error(f"An error occurred while attempting login. {str(e)}")
+            exit(1)
 
         name_field_name = token_data.get('nameFieldName')
         token_field = token_data.get('validFromFieldName')

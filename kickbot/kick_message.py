@@ -2,7 +2,7 @@ import json
 
 
 class KickMessage:
-    def __init__(self, raw_data: str):
+    def __init__(self, raw_data: str) -> None:
         data = json.loads(raw_data)
         self.data = data
         self.id: str | None = data.get('id')

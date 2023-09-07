@@ -200,7 +200,7 @@ def get_viewer_info(bot, username: str) -> dict | None:
     :return: Dictionary containing viewer info, or None, indicating failure
     """
     slug = username.replace('_', '-')
-    url = f"https://kick.com/api/v2/channels/lukemvc/users/{slug}"
+    url = f"https://kick.com/api/v2/channels/{bot.streamer_slug}/users/{slug}"
     headers = BASE_HEADERS.copy()
     headers['Authorization'] = bot.client.auth_token
     headers['X-Xsrf-Token'] = bot.client.xsrf
