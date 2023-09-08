@@ -3,6 +3,7 @@
 ### Unofficial python package to create bots and interact with the kick.com api
 
 ---
+
 ## Table of Contents
 
 - [About](#about)
@@ -16,8 +17,8 @@
 - [Timed event functions](#timed-events)
 - [User Interface](https://github.com/lukemvc/kickbotui)
 
-
 ---
+
 ## About
 
 This package allows you to create bots (user bots) to monitor a stream. 
@@ -28,10 +29,8 @@ authentication for the bot to be able to log in and handle commands / messages.
 It is reccomended to add the bot user as a moderator for your stream. 
 This will also give you access to additional [moderator functions](#chat-moderation).
 
-There is also a user-interface version availible at [kickbotui](https://github.com/lukemvc/kickbotui)
-
-
 ## Installation
+
 ```console
 pip install kickbot
 ```
@@ -53,6 +52,7 @@ Currently supports the following features. More may be added soon, and contribut
 ---
 
 *Note*: For more examples, look in the [Examples Folder](/examples)
+
 ```python3
 from kickbot import KickBot, KickMessage
 from datetime import timedelta
@@ -106,17 +106,19 @@ if __name__ == '__main__':
     
     bot.poll()
 ```
+
 <br>
 
 ## Command and Message Handling
 
-
 ---
+
 - Handler callback functions must be async
 - Command handler looks to match the first word of the message / command.
 - Message handler looks to match the full message.
 
 ### Paramaters
+
 ```python3
 bot.add_message_handler('hello world', handle_hello_message)
 bot.add_command_handler('!time', handle_time_command)
@@ -127,10 +129,12 @@ bot.add_command_handler('!time', handle_time_command)
 - The command / message to look for 
 
 #### Callback function (type ```Callable```)
+ 
 - Async callback function for the command  / message to trigger
 
 
 ### Handler Callback function parameters:
+
 ```python3
 async def handle_hello_command(bot: KickBot, message: KickMessage):...
 ```
@@ -139,11 +143,14 @@ async def handle_hello_command(bot: KickBot, message: KickMessage):...
 #### Bot parameter (type: ```KickBot```) 
 
 - This will give you access to functions for the bot, such as ```bot.send_text```, and ```bot.reply_text```.
+
 #### Message parameter (type: ```KickMessage```)
+
 - This will give you access to all attributes of the message that triggered the handler. See [KickMessage](/kickbot/kick_message.py) for 
 a full list of attributes.
 
 Some useful message attributes include:
+
 ```python3
 async def hello_handler(bot: KickBot, message: KickMessage):
     content = message.content # main message content
@@ -158,6 +165,7 @@ async def hello_handler(bot: KickBot, message: KickMessage):
     response = f"Hello {sender_username}"
     await bot.reply_text(message, response)
 ```
+
 <br>
 
 ## Sending Messages and Reply's
@@ -165,6 +173,7 @@ async def hello_handler(bot: KickBot, message: KickMessage):
 Functions mainly to be used inside a callback function, to send a message in chat, or reply to a users message.
 
 ### Messages:
+
 ```python
 await bot.send_text(chat_message)
 ```
@@ -173,8 +182,8 @@ await bot.send_text(chat_message)
 
 - Message to be sent in chat
 
-
 ### Reply's:
+
 ```python3
 await bot.reply_text(message, reply)
 ```
@@ -190,11 +199,13 @@ await bot.reply_text(message, reply)
 <br>
 
 ## Streamer and Chat Information
+
 You can access information about the streamer, and chatroom via the ```bot.streamer_info``` , ```bot.chatroom_info```
 and ```bot.chatroom_settings``` dictionaries.
 
 
 Streamer Info: [Full Example](/examples/streamer_info_example.json)
+
 ```python
 streamer_name = bot.streamer_name
 follower_count = bot.streamer_info.get('followersCount')
@@ -202,6 +213,7 @@ streamer_user_id = bot.streamer_info.get('user_id')
 ```
 
 Chatroom Info: [Full Example](/examples/chatroom_info_example.json)
+
 ```python
 is_chat_slow_mode = bot.chatroom_info.get('slow_mode')
 is_followers_only = bot.chatroom_info.get('followers_only')
@@ -209,6 +221,7 @@ is_subscribers_only = bot.chatroom_info.get('subscribers_only')
 ```
 
 Chatroom Settings: [Full Example](/examples/chatroom_settings_example.json)
+
 ```python
 links_allowed = bot.chatroom_settings.get('allow_link')
 is_antibot_mode = bot.chatroom_settings.get('anti_bot_mode')
@@ -216,26 +229,27 @@ gifts_enabled = bot.chatroom_settings.get('gifts_enabled')
 ```
 
 Bot Settings: [Full Example](examples/bot_settings_example.json)
+
 ```python
 is_mod = bot.bot_settings.get('is_moderator')
 is_admin = bot.bot_settings.get('is_admin')
 ```
 
-
 #### Viewer Count
 
 Access the current amount of viewers in the stream as an integer. 
+
 ```python
 viewers = bot.current_viewers()
 ```
+
 <br>
 
 ## Chat Moderation
+
 *Note*: You must add the bot user as a moderator to access these functions.
 
 All moderator functions are accessed using ```bot.moderator```
-
-
 
 ### Viewer User Info
 
@@ -243,45 +257,63 @@ All moderator functions are accessed using ```bot.moderator```
 viewer_info = bot.moderator.get_viewer_info('user_username')
 ```
 Retrieve information about a viewer.
+
 #### Paramaters:
+
 ```username``` type: ```str```
 
 #### Returns:
+
 Dictionary containing viewer user info. [Full Example](examples/viewer_info_example.json)
 
-
 ### Timeout Ban
+
 ```python
 bot.moderator.timeout_user('username', 20)
 ```
 
 Ban a user for a certain amount of time.
+
 #### Paramaters:
+
 ```username``` type: ```str```: Username to be banned
 
 ```minutes``` type: ```int```: Time in minutes to ban the user for
 
 #### Returns:
+
 ```None```
 
 ### Permaban
+
 ```python
 bot.moderator.permaban('username')
 ```
+
 Permanently ban a user.
+
 #### Parameters:
+
 ```username``` type: ```str```: Username to ban permanently
+
 #### Returns:
+
 ```None```
 
 ### Leaderboard
+
 ```python
 bot.moderator.get_leaderboard()
 ```
+
 Retrieve the current chat leaderboard. 
+
 #### Parameters:
+
 ```None```
+
 #### Returns:
+
 Dictionary containing current chat leaderboard users and stats. [Full Example](examples/leaderboard_example.json)
 
 <br>
@@ -291,12 +323,12 @@ Dictionary containing current chat leaderboard users and stats. [Full Example](e
 ```python3
 bot.add_timed_event(timedelta(minutes=30), send_links_in_chat)
 ```
+
 Set a reoccurring function to be called, and the frequency to call the function.
 
 i.e: Send links for your socials in chat every 30 minutes
 
 ### Parameters
-
 
 #### Frequency parameter (type: ```timedelta```)
 
