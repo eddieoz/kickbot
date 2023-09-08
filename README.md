@@ -15,7 +15,6 @@
 - [Streamer / Chat information](#streamer-and-chat-information)
 - [Chat Moderation](#chat-moderation)
 - [Timed event functions](#timed-events)
-- [User Interface](https://github.com/lukemvc/kickbotui)
 
 ---
 
