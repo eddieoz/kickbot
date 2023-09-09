@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import threading
 import websockets
 
 from datetime import timedelta
@@ -45,6 +44,7 @@ class KickBot:
         self.moderator: Optional[Moderator] = None
         self.handled_commands: dict[str, Callable] = {}
         self.handled_messages: dict[str, Callable] = {}
+        self.timed_events: list[tuple[timedelta, Callable]] = []
         self._is_active = True
 
     def poll(self):
@@ -112,6 +112,8 @@ class KickBot:
     def add_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
         Add an event function to be called with a frequency of frequency_time.
+        A tuple containing (time, function) will be added to self.timed_events.
+        Once the main event loop is running, a task is created for each tuple.
 
         :param frequency_time: Time interval between function calls.
         :param timed_function: Async function to be called.
@@ -120,11 +122,7 @@ class KickBot:
             raise KickBotException("Must set streamer name to monitor first.")
         if frequency_time.total_seconds() <= 0:
             raise KickBotException("Frequency time must be greater than 0.")
-        event_thread = threading.Thread(target=asyncio.run,
-                                        args=(self._run_timed_event(frequency_time, timed_function),),
-                                        daemon=True,
-                                        )
-        event_thread.start()
+        self.timed_events.append((frequency_time, timed_function))
 
     async def send_text(self, message: str) -> None:
         """
@@ -183,9 +181,11 @@ class KickBot:
     async def _poll(self) -> None:
         """
         Main internal function to poll the streamers chat and respond to messages/commands.
+        Create a task for each timed event in self.timed_events.
         """
-        if self.streamer_name is None:
-            raise KickBotException("Must set streamer name before polling.")
+        for frequency, func in self.timed_events:
+            asyncio.create_task(self._run_timed_event(frequency, func))
+
         async with websockets.connect(self._ws_uri) as self.sock:
             connection_response = await self._recv()
             await self._handle_first_connect(connection_response)
