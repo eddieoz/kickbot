@@ -51,7 +51,8 @@ class KickClient:
         if any(value is None for value in [name_field_name, token_field, login_token]):
             raise KickAuthException("Error when parsing token fields while attempting login.")
 
-        login_response = self._send_login_request(name_field_name, token_field, login_token)
+        login_payload = self._base_login_payload(name_field_name, token_field, login_token)
+        login_response = self._send_login_request(login_payload)
         login_data = login_response.json()
         login_status = login_response.status_code
         match login_status:
@@ -59,7 +60,12 @@ class KickClient:
                 self.auth_token = login_data.get('token')
                 twofactor = login_data.get('2fa_required')
                 if twofactor:
-                    raise KickAuthException("Must disable 2-factor authentication on the bot account.")
+                    logger.info("2FA REQUIRED")
+                    twofactor_code = self._get_2fa_code()
+                    login_payload['one_time_password'] = twofactor_code
+                    twofactor_result = self._send_login_2fa_code(login_payload)
+                    if not twofactor_result:
+                        raise KickAuthException("Error occurred while sending 2fa login code.")
             case 422:
                 raise KickAuthException("Login Failed:", login_data)
             case 419:
@@ -100,18 +106,7 @@ class KickClient:
         headers['path'] = "/kick-token-provider"
         return self.scraper.get(url, cookies=self.cookies, headers=headers)
 
-    def _send_login_request(self, name_field_name: str, token_field: str, login_token: str) -> requests.Response:
-        """
-        Perform the login post request to the mobile login endpoint. On desktop, I get 2fa more, and a csrf error (419).
-
-        :param name_field_name: Token field received from _request_token_provider
-        :param token_field: Token field received from _request_token_provider
-        :param login_token: Token field received from _request_token_provider
-        :return: Login post request response
-        """
-        url = 'https://kick.com/mobile/login'
-        headers = BASE_HEADERS.copy()
-        headers['X-Xsrf-Token'] = self.xsrf
+    def _base_login_payload(self, name_field_name: str, token_field: str, login_token: str) -> dict:
         payload = {
             name_field_name: '',
             token_field: login_token,
@@ -119,4 +114,41 @@ class KickClient:
             "isMobileRequest": True,
             "password": self.password,
         }
+        return payload
+
+    def _send_login_request(self, payload: dict) -> requests.Response:
+        """
+        Perform the login post request to the mobile login endpoint. On desktop, I get 2fa more, and a csrf error (419).
+
+        :param payload: Login payload containing user info and tokens.
+        :return: Login post request response
+        """
+        url = 'https://kick.com/mobile/login'
+        headers = BASE_HEADERS.copy()
+        headers['X-Xsrf-Token'] = self.xsrf
         return self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
+
+    @staticmethod
+    def _get_2fa_code() -> str:
+        input_attempts = 0
+        while input_attempts < 3:
+            input_code = input("Enter the 2fa code you received from kick: ")
+            try:
+                code = int(input_code)
+                if len(str(code)) != 6:
+                    print("    Invalid input code format.")
+                    input_attempts += 1
+                else:
+                    return str(code)
+            except ValueError:
+                print("    Invalid code input. must consist of numbers only.")
+                input_attempts += 1
+        raise KickAuthException("Max 2fa code input attempts reached.")
+
+    def _send_login_2fa_code(self, payload: dict) -> bool:
+        url = 'https://kick.com/mobile/login'
+        headers = BASE_HEADERS.copy()
+        headers['X-Xsrf-Token'] = self.xsrf
+        response = self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
+        self.auth_token = response.json().get('token')
+        return response.status_code == 200
