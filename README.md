@@ -1,6 +1,6 @@
 # kickbot
 
-### Unofficial python package to create bots and interact with the kick.com api
+Unofficial python package to create bots and interact with the kick.com api
 
 ---
 
