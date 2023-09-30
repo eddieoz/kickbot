@@ -21,6 +21,15 @@ from .kick_helper import (
     send_reply_in_chat
 )
 
+from utils.TwitchMarkovChain.MarkovChainBot import MarkovChain
+from utils.TwitchMarkovChain.Settings import Settings, SettingsData
+from utils.TwitchMarkovChain.Database import Database
+from utils.TwitchMarkovChain.Timer import LoopingTimer
+from TwitchWebsocket import Message, TwitchWebsocket
+import socket, time, logging, re, string
+from nltk.tokenize import sent_tokenize
+from typing import List, Tuple
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +55,117 @@ class KickBot:
         self.handled_messages: dict[str, Callable] = {}
         self.timed_events: list[tuple[timedelta, Callable]] = []
         self._is_active = True
+
+        # Markov Chain
+        self.prev_message_t = 0
+        self._enabled = True
+        # This regex should detect similar phrases as links as Twitch does
+        self.link_regex = re.compile("\w+\.[a-z]{2,}")
+        # List of moderators used in blacklist modification, includes broadcaster
+        self.mod_list = []
+        self.set_blacklist()
+
+        # Fill previously initialised variables with data from the settings.txt file
+        Settings(self)
+        self.db = Database(self.chan)
+
+        # Set up daemon Timer to send help messages
+        if self.help_message_timer > 0:
+            if self.help_message_timer < 300:
+                raise ValueError("Value for \"HelpMessageTimer\" in must be at least 300 seconds, or a negative number for no help messages.")
+            t = LoopingTimer(self.help_message_timer, self.send_help_message)
+            t.start()
+        
+        # Set up daemon Timer to send automatic generation messages
+        if self.automatic_generation_timer > 0:
+            if self.automatic_generation_timer < 30:
+                raise ValueError("Value for \"AutomaticGenerationMessage\" in must be at least 30 seconds, or a negative number for no automatic generations.")
+            t = LoopingTimer(self.automatic_generation_timer, self.send_automatic_generation_message)
+            t.start()
+
+        self.ws = TwitchWebsocket(host=self.host, 
+                                  port=self.port,
+                                  chan=self.chan,
+                                  nick=self.nick,
+                                  auth=self.auth,
+                                  callback=MarkovChain.message_handler,
+                                  capability=["commands", "tags"],
+                                  live=True)
+
+    def set_settings(self, settings: SettingsData):
+        """Fill class instance attributes based on the settings file.
+
+        Args:
+            settings (SettingsData): The settings dict with information from the settings file.
+        """
+        self.host = settings["Host"]
+        self.port = settings["Port"]
+        self.chan = settings["Channel"]
+        self.nick = settings["Nickname"]
+        self.auth = settings["Authentication"]
+        self.denied_users = [user.lower() for user in settings["DeniedUsers"]] + [self.nick.lower()]
+        self.allowed_users = [user.lower() for user in settings["AllowedUsers"]]
+        self.cooldown = settings["Cooldown"]
+        self.key_length = settings["KeyLength"]
+        self.max_sentence_length = settings["MaxSentenceWordAmount"]
+        self.min_sentence_length = settings["MinSentenceWordAmount"]
+        self.help_message_timer = settings["HelpMessageTimer"]
+        self.automatic_generation_timer = settings["AutomaticGenerationTimer"]
+        self.whisper_cooldown = settings["WhisperCooldown"]
+        self.enable_generate_command = settings["EnableGenerateCommand"]
+        self.sent_separator = settings["SentenceSeparator"]
+        self.allow_generate_params = settings["AllowGenerateParams"]
+        self.generate_commands = tuple(settings["GenerateCommands"])
+
+    def send_help_message(self) -> None:
+        """Send a Help message to the connected chat, as long as the bot wasn't disabled."""
+        if self._enabled:
+            logger.info("Help message sent.")
+            try:
+                self.ws.send_message("Learn how this bot generates sentences here: https://github.com/CubieDev/TwitchMarkovChain#how-it-works")
+            except socket.OSError as error:
+                logger.warning(f"[OSError: {error}] upon sending help message. Ignoring.")
+    
+    def send_automatic_generation_message(self) -> None:
+        """Send an automatic generation message to the connected chat.
+        
+        As long as the bot wasn't disabled, just like if someone typed "!g" in chat.
+        """
+        if self._enabled:
+            sentence, success = self.generate()
+            if success:
+                logger.info(sentence)
+                # Try to send a message. Just log a warning on fail
+                try:
+                    self.ws.send_message(sentence)
+                except socket.OSError as error:
+                    logger.warning(f"[OSError: {error}] upon sending automatic generation message. Ignoring.")
+            else:
+                logger.info("Attempted to output automatic generation message, but there is not enough learned information yet.")
+
+    def write_blacklist(self, blacklist: List[str]) -> None:
+        """Write blacklist.txt given a list of banned words.
+
+        Args:
+            blacklist (List[str]): The list of banned words to write.
+        """
+        logger.debug("Writing Blacklist...")
+        with open("blacklist.txt", "w") as f:
+            f.write("\n".join(sorted(blacklist, key=lambda x: len(x), reverse=True)))
+        logger.debug("Written Blacklist.")
+
+    def set_blacklist(self) -> None:
+        """Read blacklist.txt and set `self.blacklist` to the list of banned words."""
+        logger.debug("Loading Blacklist...")
+        try:
+            with open("blacklist.txt", "r") as f:
+                self.blacklist = [l.replace("\n", "") for l in f.readlines()]
+                logger.debug("Loaded Blacklist.")
+        
+        except FileNotFoundError:
+            logger.warning("Loading Blacklist Failed!")
+            self.blacklist = ["<start>", "<end>"]
+            self.write_blacklist(self.blacklist)
 
     def poll(self):
         """
@@ -124,6 +244,21 @@ class KickBot:
             raise KickBotException("Frequency time must be greater than 0.")
         self.timed_events.append((frequency_time, timed_function))
 
+    def remove_timed_event(self, frequency_time: timedelta, timed_function: Callable):
+        """
+        Remove an event function to be called with a frequency of frequency_time.
+        A tuple containing (time, function) will be added to self.timed_events.
+        Once the main event loop is running, a task is created for each tuple.
+
+        :param frequency_time: Time interval between function calls.
+        :param timed_function: Async function to be called.
+        """
+        if self.streamer_name is None:
+            raise KickBotException("Must set streamer name to monitor first.")
+        if frequency_time.total_seconds() <= 0:
+            raise KickBotException("Frequency time must be greater than 0.")
+        self.timed_events.remove((frequency_time, timed_function))
+
     async def send_text(self, message: str) -> None:
         """
         Used to send text in the chat.
@@ -184,7 +319,10 @@ class KickBot:
         Create a task for each timed event in self.timed_events.
         """
         for frequency, func in self.timed_events:
-            asyncio.create_task(self._run_timed_event(frequency, func))
+            try: 
+                asyncio.create_task(self._run_timed_event(frequency, func))
+            except:
+                logger.warning(f"Error creating task for timed event {func.__name__}")
 
         async with websockets.connect(self._ws_uri) as self.sock:
             connection_response = await self._recv()
@@ -214,6 +352,10 @@ class KickBot:
         command = message.args[0].casefold()
         logger.debug(f"New Message from {message.sender.username} | MESSAGE: {content!r}")
 
+        # create a variable in the format var['message'] = content
+        
+        MarkovChain.message_handler(self, content)
+
         if content in self.handled_messages:
             message_func = self.handled_messages[content]
             await message_func(self, message)
@@ -223,6 +365,15 @@ class KickBot:
             command_func = self.handled_commands[command]
             await command_func(self, message)
             logger.info(f"Handled Command: {command!r} from user {message.sender.username} ({message.sender.user_id})")
+        
+        else:
+            # verify if self.handled_messages is contained in the content variable
+            for msg in self.handled_messages:
+                # if it is, then call the function
+                if msg in content:
+                    message_func = self.handled_messages[msg]
+                    await message_func(self, message)
+                    logger.info(f"Handled Message: {content!r} from user {message.sender.username} ({message.sender.user_id})")
 
     async def _join_chatroom(self, chatroom_id: int) -> None:
         """
@@ -255,10 +406,13 @@ class KickBot:
         :param frequency_time: Frequency to call the timed function
         :param timed_function: timed function to be called
         """
-        while self._is_active:
-            await asyncio.sleep(frequency_time.total_seconds())
-            await timed_function(self)
-            logger.info(f"Timed Event Called")
+        try:
+            while self._is_active:
+                await asyncio.sleep(frequency_time.total_seconds())
+                await timed_function(self)
+                logger.info(f"Timed Event Called")
+        except:
+            logger.warning(f"Error running timed event {timed_function.__name__}")
 
     async def _send(self, command: dict) -> None:
         """

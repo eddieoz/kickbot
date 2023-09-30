@@ -1,10 +1,17 @@
+from time import sleep
 import requests
 
 from kickbot import KickBot, KickMessage
 from datetime import datetime, timedelta
 
-# import sys
-# sys.path.append('../utils/TwitchMarkovChain/')
+import sys
+sys.path.append('utils/TwitchMarkovChain/')
+
+# Load configurations from settings.json file
+import json
+with open('settings.json') as f:
+    settings = json.load(f)
+
 
 from utils.TwitchMarkovChain.MarkovChainBot import MarkovChain
 
@@ -47,9 +54,10 @@ async def current_time(bot: KickBot, message: KickMessage):
 
 async def markov_chain(bot: KickBot, message: KickMessage):
     """ Reply with the current UTC time """
-    message = MarkovChain().generate_message()
-    reply = f"{message}"
-    await bot.reply_text(message, reply)
+    msg = message.content.split(' ')
+    msg.pop(0)
+    reply, ret = MarkovChain.generate(bot, msg)
+    await bot.reply_text(message, str(reply))
 
 
 async def ban_if_says_gay(bot: KickBot, message: KickMessage):
@@ -61,35 +69,73 @@ async def ban_if_says_gay(bot: KickBot, message: KickMessage):
 
 async def send_links_in_chat(bot: KickBot):
     """ Timed event to send social links every 30 mins """
-    links = "Youtube: https://youtube.com\n\nTwitch: https://twitch.tv"
+    links = "Youtube: https://youtube.com/eddieoz\n\nKick: https://kick.com/eddieoz"
     await bot.send_text(links)
 
 
 async def github_link(bot: KickBot, message: KickMessage):
     """ Reply to '!github' command with link to github"""
-    reply = "Github: 'https://github.com/lukemvc'"
+    reply = "Github: 'https://github.com/eddieoz'"
     await bot.reply_text(message, reply)
 
+import random
+
+async def morning_greeting(bot: KickBot, message: KickMessage):
+    # randomize reply among a list of replies
+    replies = ["Bom dia!", "Good morning!", "Bonjour!", "Guten Morgen!", "GM!", "Buenos dias!", "Buongiorno!"]
+    reply = f"{random.choice(replies)} @{message.sender.username}"
+    await bot.reply_text(message, reply)
+
+async def afternoon_greeting(bot: KickBot, message: KickMessage):
+    # randomize reply among a list of replies
+    replies = ["Boa tarde!", "Good afternoon!", "Bonjour!", "Guten Tag!", "GT!", "Buenas tardes!", "Buon pomeriggio!"]
+    reply = f"{random.choice(replies)} @{message.sender.username}"
+    await bot.reply_text(message, reply)
+
+async def night_greeting(bot: KickBot, message: KickMessage):
+    # randomize reply among a list of replies
+    replies = ["Boa noite!", "Good night!", "Bonsoir!", "Gute Nacht!", "GN!", "Buenas noches!", "Buona notte!"]
+    reply = f"{random.choice(replies)} @{message.sender.username}"
+    await bot.reply_text(message, reply)
+
+async def say_hello(bot: KickBot):
+    # randomize reply among a list of replies
+    replies = ["Oi!", "Hello!", "Salut!", "Hallo!", "Hola!", "Ciao!", "Olá!", "Hi!", "Oi oi oi!", "Oi oi!", "Oi oi oi oi oi!"]
+    reply = f"{random.choice(replies)}"
+    await bot.send_text(reply)
+
+async def im_back(bot: KickBot):
+    # randomize reply among a list of replies
+    replies = ["Sr. Botoshi online e se apresentando para o trabalho! 😎"]
+    reply = f"{random.choice(replies)}"
+    await bot.send_text(reply)
+    bot.remove_timed_event(timedelta(seconds=1), im_back)
 
 if __name__ == '__main__':
-    USERBOT_EMAIL = "greyjj@pm.me"
-    USERBOT_PASS = "fck9gwq4qba-rdc2MDC"
-    STREAMER = "sr_botoshi"
+
+    USERBOT_EMAIL = settings['KickEmail']
+    USERBOT_PASS = settings['KickPass']
+    STREAMER = settings['KickStreamer']
 
     bot = KickBot(USERBOT_EMAIL, USERBOT_PASS)
     bot.set_streamer(STREAMER)
 
-    bot.chatroom_id = "1164726"
+    bot.chatroom_id = settings['KickChatroom']
 
     bot.add_command_handler('!following', time_following)
     bot.add_command_handler('!leaders', current_leaders)
     bot.add_command_handler('!joke', tell_a_joke)
     bot.add_command_handler('!time', current_time)
     bot.add_command_handler('!github', github_link)
-    bot.add_command_handler('!g', markov_chain)
+    bot.add_command_handler('!b', markov_chain)
 
-    bot.add_message_handler('your gay', ban_if_says_gay)
+    bot.add_message_handler('bom dia', morning_greeting)
+    bot.add_message_handler('boa tarde', afternoon_greeting)
+    bot.add_message_handler('boa noite', night_greeting)
 
     bot.add_timed_event(timedelta(minutes=30), send_links_in_chat)
-
+    bot.add_timed_event(timedelta(minutes=15), say_hello)
+    bot.add_timed_event(timedelta(seconds=1), im_back)
+    
     bot.poll()
+    

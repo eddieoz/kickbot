@@ -6,6 +6,9 @@ from .kick_helper import (
     get_streamer_leaderboard
 )
 
+from typing import List, Tuple
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,3 +53,14 @@ class Moderator:
         """
         leaderboard = get_streamer_leaderboard(self.bot)
         return leaderboard
+    
+    def write_blacklist(self, blacklist: List[str]) -> None:
+        """Write blacklist.txt given a list of banned words.
+
+        Args:
+            blacklist (List[str]): The list of banned words to write.
+        """
+        logger.debug("Writing Blacklist...")
+        with open("blacklist.txt", "w") as f:
+            f.write("\n".join(sorted(blacklist, key=lambda x: len(x), reverse=True)))
+        logger.debug("Written Blacklist.")

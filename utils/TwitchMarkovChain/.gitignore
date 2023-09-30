@@ -1,27 +1,3 @@
-temp.py
-**/.env
-**/__pycache__/
-/.idea
-/venv
-*.pyc
-*.pyo
-*.egg-info/
-dist/
-build/
-
-# Blacklist
-# This file should be automatically generated at launch if not created already
-blacklist.txt
-
-# Settings
-# This file should be automatically generated at launch if not created already
-settings.json
-
-# Database files
-*.db
-
-examples/full_example.py
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
