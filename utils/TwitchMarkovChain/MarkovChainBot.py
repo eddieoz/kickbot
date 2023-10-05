@@ -238,7 +238,7 @@ class MarkovChain:
                             # so that the key is correct for the next word.
                             key.pop(0)
                             key.append(word)
-                            print(f"Key: {key}, Word: {word}")
+                            # print(f"Key: {key}, Word: {word}")
                         # Add <END> at the end of the sentence
                         self.db.add_rule_queue(key + ["<END>"])
                     
