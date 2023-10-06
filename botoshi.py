@@ -12,6 +12,7 @@ import json
 with open('settings.json') as f:
     settings = json.load(f)
 
+import random
 
 from utils.TwitchMarkovChain.MarkovChainBot import MarkovChain
 
@@ -78,23 +79,22 @@ async def github_link(bot: KickBot, message: KickMessage):
     reply = "Github: 'https://github.com/eddieoz'"
     await bot.reply_text(message, reply)
 
-import random
-
 async def morning_greeting(bot: KickBot, message: KickMessage):
     # randomize reply among a list of replies
-    replies = ["Bom dia!", "Good morning!", "Bonjour!", "Guten Morgen!", "GM!", "Buenos dias!", "Buongiorno!"]
+    replies = ["Bom dia!", "Good morning!", "Bonjour!", "Guten Morgen!", "GM!", "Buenos dias!", "Buongiorno!", "Tere Hommikust!"]
     reply = f"{random.choice(replies)} @{message.sender.username}"
     await bot.reply_text(message, reply)
-
+    # send_alert('https://media.giphy.com/media/3o6Zt6MLxUZV2LlqWc/giphy.gif', 'https://www.myinstants.com/media/sounds/oh-my-god.mp3', reply)
+    
 async def afternoon_greeting(bot: KickBot, message: KickMessage):
     # randomize reply among a list of replies
-    replies = ["Boa tarde!", "Good afternoon!", "Bonjour!", "Guten Tag!", "GT!", "Buenas tardes!", "Buon pomeriggio!"]
+    replies = ["Boa tarde!", "Good afternoon!", "Bonjour!", "Guten Tag!", "GT!", "Buenas tardes!", "Buon pomeriggio!", "Tere Päevast!"]
     reply = f"{random.choice(replies)} @{message.sender.username}"
     await bot.reply_text(message, reply)
 
 async def night_greeting(bot: KickBot, message: KickMessage):
     # randomize reply among a list of replies
-    replies = ["Boa noite!", "Good night!", "Bonsoir!", "Gute Nacht!", "GN!", "Buenas noches!", "Buona notte!"]
+    replies = ["Boa noite!", "Good night!", "Bonsoir!", "Gute Nacht!", "GN!", "Buenas noches!", "Buona notte!", "Head ööd!"]
     reply = f"{random.choice(replies)} @{message.sender.username}"
     await bot.reply_text(message, reply)
 
@@ -110,6 +110,31 @@ async def im_back(bot: KickBot):
     reply = f"{random.choice(replies)}"
     await bot.send_text(reply)
     bot.remove_timed_event(timedelta(seconds=1), im_back)
+
+async def switch_alert(bot: KickBot, message: KickMessage):
+    """ Reply with the current UTC time """
+    if message.data['sender']['identity']['badges'][0]['type'] == 'broadcaster' or message.data['sender']['identity']['badges'][0]['type'] == 'moderator':
+        if message.args[1] == 'on':
+            settings['Alerts']['Enable'] = True
+            reply = 'Alerts enabled!'
+        elif message.args[1] == 'off':
+            settings['Alerts']['Enable'] = False
+            reply = 'Alerts disabled!'
+        await bot.reply_text(message, str(reply))
+
+def send_alert(img, audio, text):
+    if (settings['Alerts']['Enable']):
+        width = '30%'
+        fontFamily = 'Verdana'
+        fontSize = 40
+        borderColor = 'yellow'
+        borderWidth = 2
+        color = 'red'
+        duration = 5000
+        parameters = f'/trigger_alert?gif={img}&audio={audio}&text={text}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
+        url = settings['Alerts']['Host'] + parameters
+        alert = requests.get(url)
+
 
 if __name__ == '__main__':
 
@@ -132,6 +157,7 @@ if __name__ == '__main__':
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
+    bot.add_message_handler('!alert', switch_alert)
 
     bot.add_timed_event(timedelta(minutes=30), send_links_in_chat)
     bot.add_timed_event(timedelta(minutes=15), say_hello)

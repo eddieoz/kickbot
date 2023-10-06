@@ -32,6 +32,8 @@ from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
+with open('settings.json') as f:
+    settings = json.load(f)
 
 class KickBot:
     """
@@ -333,10 +335,32 @@ class KickBot:
                     response = await self._recv()
                     if response.get('event') == 'App\\Events\\ChatMessageEvent':
                         await self._handle_chat_message(response)
+                    if response.get('event') == 'App\\Events\\GiftedSubscriptionsEvent':
+                        # {'event': 'App\\Events\\GiftedSubscriptionsEvent', 
+                        # 'data': '{"chatroom_id":1164726,"gifted_usernames":["Khalek"],"gifter_username":"eddieoz"}', 'channel': 'chatrooms.1164726.v2'}
+                        await self._handle_gifted_subscriptions(response)
                 except asyncio.exceptions.CancelledError:
                     break
         logger.info(f"Disconnected from websocket {self._socket_id}")
         self._is_active = False
+
+    async def _handle_gifted_subscriptions(self, inbound_message: dict) -> None:
+        """
+        Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
+
+        :param inbound_message: Raw inbound message from socket
+        """
+        gifter = json.loads(inbound_message.get('data')).get('gifter_username')
+        gifted_usernames = json.loads(inbound_message.get('data')).get('gifted_usernames')
+        chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
+
+        if settings['GiftBlokitos'] != 0:
+            blokitos = len(gifted_usernames) * settings['GiftBlokitos']
+            message = f'!points add @{gifter} {blokitos}'
+            r = send_message_in_chat(self, message)
+            if r.status_code != 200:
+                raise KickBotException(f"An error occurred while sending message {message!r}")
+            logger.info(f"Added {blokitos} to user {gifter} for sub_gifts ({gifted_usernames})")
 
     async def _handle_chat_message(self, inbound_message: dict) -> None:
         """
