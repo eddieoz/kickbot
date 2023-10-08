@@ -1,9 +1,11 @@
 from time import sleep
 import requests
 from urllib.parse import urlencode, quote_plus
+
 from threading import Lock, Timer
-# Create a lock object
 lock = Lock()
+
+import aiohttp
 
 from kickbot import KickBot, KickMessage
 from datetime import datetime, timedelta
@@ -168,21 +170,28 @@ async def switch_alert(bot: KickBot, message: KickMessage):
 
 async def send_alert(img, audio, text, tts):
     if (settings['Alerts']['Enable']):
-        lock.acquire()
+        # Create a new lock object        
+        lock.acquire(timeout=15)
         try:
-            width = '300px'
-            fontFamily = 'Arial'
-            fontSize = 30
-            color = 'gold'
-            borderColor = 'black'
-            borderWidth = 2
-            duration = 9000
-            parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
-            url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
-            alert = requests.get(url)
+            async with aiohttp.ClientSession() as session:
+                width = '300px'
+                fontFamily = 'Arial'
+                fontSize = 30
+                color = 'gold'
+                borderColor = 'black'
+                borderWidth = 2
+                duration = 9000
+                parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
+                url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
+                # alert = requests.get(url)
+                async with session.get(url) as response:
+                    response_text = await response.text()
+        except Exception as e:
+            print(f'Error sending alert: {e}')
         finally:
-            # Release the lock after 10 seconds
-            Timer(30, lock.release).start()
+            # Release the lock after x seconds
+            Timer(15, lock.release).start()
+
 
 if __name__ == '__main__':
 
