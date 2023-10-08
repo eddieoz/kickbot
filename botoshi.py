@@ -121,7 +121,7 @@ async def burro_alert (bot: KickBot, message: KickMessage):
     send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '', '')
 
 async def creptomoeda_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media1.giphy.com/media/PtdOBG0BD9Vvi/giphy.gif', 'https://firebasestorage.googleapis.com/v0/b/twitch-soundboard.appspot.com/o/sounds%2F3438bca9-880c-4bde-9f19-7e0e0320737c.mp3?alt=media', '', '')
+    send_alert('https://media1.giphy.com/media/PtdOBG0BD9Vvi/giphy.gif', 'https://www.myinstants.com/media/sounds/creptomoeda.mp3', '', '')
 
 async def no_alert (bot: KickBot, message: KickMessage):
     send_alert('https://media1.giphy.com/media/vyTnNTrs3wqQ0UIvwE/giphy.gif', 'https://www.myinstants.com/media/sounds/no-god-please-no-noooooooooo.mp3', '', '')
