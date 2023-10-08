@@ -1,6 +1,9 @@
 from time import sleep
 import requests
 from urllib.parse import urlencode, quote_plus
+from threading import Lock, Timer
+# Create a lock object
+lock = Lock()
 
 from kickbot import KickBot, KickMessage
 from datetime import datetime, timedelta
@@ -115,31 +118,31 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def aplauso_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
+    await send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
 
 async def burro_alert (bot: KickBot, message: KickMessage):
-    send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '', '')
+    await send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '', '')
 
 async def creptomoeda_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/2HaiQQmkMx8AAAAC/leonardo-di-caprio-leo-dicaprio.gif', 'https://www.myinstants.com/media/sounds/creptomoeda.mp3', '', '')
+    await send_alert('https://media.tenor.com/2HaiQQmkMx8AAAAC/leonardo-di-caprio-leo-dicaprio.gif', 'https://www.myinstants.com/media/sounds/creptomoeda.mp3', '', '')
 
 async def no_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media1.giphy.com/media/vyTnNTrs3wqQ0UIvwE/giphy.gif', 'https://www.myinstants.com/media/sounds/no-god-please-no-noooooooooo.mp3', '', '')
+    await send_alert('https://media1.giphy.com/media/vyTnNTrs3wqQ0UIvwE/giphy.gif', 'https://www.myinstants.com/media/sounds/no-god-please-no-noooooooooo.mp3', '', '')
 
 async def nani_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/RLot156RHR0AAAAd/nani-what.gif', 'https://www.myinstants.com/media/sounds/nani_mkANQUf.mp3', '', '')
+    await send_alert('https://media.tenor.com/SqD2xKy43LMAAAAC/what-why.gif', 'https://www.myinstants.com/media/sounds/nani_mkANQUf.mp3', '', '')
 
 async def rica_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/0rEqnyTyZToAAAAC/eu-sou-rica-im-rich.gif', 'https://www.myinstants.com/media/sounds/eu-sou-rica_1.mp3', '', '')
+    await send_alert('https://media.tenor.com/0rEqnyTyZToAAAAC/eu-sou-rica-im-rich.gif', 'https://www.myinstants.com/media/sounds/eu-sou-rica_1.mp3', '', '')
 
 async def run_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/5j25wi9o-2YAAAAC/furious-munishkanth.gif', 'https://www.myinstants.com/media/sounds/run-vine-sound-effect_1_8k87k9t.mp3', '', '')
+    await send_alert('https://media.tenor.com/5j25wi9o-2YAAAAC/furious-munishkanth.gif', 'https://www.myinstants.com/media/sounds/run-vine-sound-effect_1_8k87k9t.mp3', '', '')
 
 async def secnagem_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/h9zATR2d9z0AAAAd/elon-musk-%E3%82%A4%E3%83%BC%E3%83%AD%E3%83%B3%E3%83%9E%E3%82%B9%E3%82%AF.gif', 'https://www.myinstants.com/media/sounds/secnagem_ZUkBLxx.mp3', '', '')
+    await send_alert('https://media.tenor.com/h9zATR2d9z0AAAAd/elon-musk-%E3%82%A4%E3%83%BC%E3%83%AD%E3%83%B3%E3%83%9E%E3%82%B9%E3%82%AF.gif', 'https://www.myinstants.com/media/sounds/secnagem_ZUkBLxx.mp3', '', '')
 
 async def tistreza_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/tn2SbVbK4moAAAAC/que-tistreza-felipe-davila-debate-presidencial-globo.gif', 'https://www.myinstants.com/media/sounds/que-tistreza.mp3', '', '')
+    await send_alert('https://media.tenor.com/tn2SbVbK4moAAAAC/que-tistreza-felipe-davila-debate-presidencial-globo.gif', 'https://www.myinstants.com/media/sounds/que-tistreza.mp3', '', '')
 
 async def msg_alert (bot: KickBot, message: KickMessage):
     msg = ' '.join(message.args[1:])
@@ -149,7 +152,7 @@ async def msg_alert (bot: KickBot, message: KickMessage):
         'text': f'@{sender} falou: {msg}',
     }
     audio = 'https://www.myinstants.com/media/sounds/drwho.mp3'
-    send_alert('https://media4.giphy.com/media/vs2LP0QZG7Brq/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
+    await send_alert('https://media4.giphy.com/media/vs2LP0QZG7Brq/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
 
 
 async def switch_alert(bot: KickBot, message: KickMessage):
@@ -163,19 +166,23 @@ async def switch_alert(bot: KickBot, message: KickMessage):
             reply = 'Alerts disabled!'
         await bot.reply_text(message, str(reply))
 
-def send_alert(img, audio, text, tts):
+async def send_alert(img, audio, text, tts):
     if (settings['Alerts']['Enable']):
-        width = '300px'
-        fontFamily = 'Arial'
-        fontSize = 30
-        color = 'gold'
-        borderColor = 'black'
-        borderWidth = 2
-        duration = 9000
-        parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
-        url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
-        alert = requests.get(url)
-
+        lock.acquire()
+        try:
+            width = '300px'
+            fontFamily = 'Arial'
+            fontSize = 30
+            color = 'gold'
+            borderColor = 'black'
+            borderWidth = 2
+            duration = 9000
+            parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
+            url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
+            alert = requests.get(url)
+        finally:
+            # Release the lock after 10 seconds
+            Timer(30, lock.release).start()
 
 if __name__ == '__main__':
 
