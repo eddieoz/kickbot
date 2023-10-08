@@ -149,7 +149,7 @@ async def msg_alert (bot: KickBot, message: KickMessage):
         'text': f'@{sender} falou: {msg}',
     }
     audio = 'https://www.myinstants.com/media/sounds/drwho.mp3'
-    send_alert('https://media0.giphy.com/media/xT8qB45TTnypO1h6KY/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
+    send_alert('https://media4.giphy.com/media/vs2LP0QZG7Brq/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
 
 
 async def switch_alert(bot: KickBot, message: KickMessage):
