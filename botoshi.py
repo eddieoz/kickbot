@@ -149,7 +149,7 @@ async def msg_alert (bot: KickBot, message: KickMessage):
         'text': f'@{sender} falou: {msg}',
     }
     audio = 'https://www.myinstants.com/media/sounds/drwho.mp3'
-    send_alert('https://media.giphy.com/media/srb6bXZHbgDsc/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
+    send_alert('https://media0.giphy.com/media/xT8qB45TTnypO1h6KY/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
 
 
 async def switch_alert(bot: KickBot, message: KickMessage):
@@ -165,12 +165,12 @@ async def switch_alert(bot: KickBot, message: KickMessage):
 
 def send_alert(img, audio, text, tts):
     if (settings['Alerts']['Enable']):
-        width = '40%'
+        width = '300px'
         fontFamily = 'Arial'
         fontSize = 30
-        borderColor = 'gray'
-        borderWidth = 0
-        color = 'white'
+        color = 'gold'
+        borderColor = 'black'
+        borderWidth = 2
         duration = 9000
         parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
         url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
