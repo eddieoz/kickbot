@@ -62,8 +62,8 @@ async def markov_chain(bot: KickBot, message: KickMessage):
     await bot.reply_text(message, str(reply))
 
 
-async def ban_if_says_gay(bot: KickBot, message: KickMessage):
-    """ Ban user for 20 minutes if they say 'your gay' """
+async def ban_for_word(bot: KickBot, message: KickMessage):
+    """ Ban user for 20 minutes if they say 'xxxx word' """
     sender_username = message.sender.username
     ban_time = 20
     bot.moderator.timeout_user(sender_username, ban_time)
@@ -71,7 +71,7 @@ async def ban_if_says_gay(bot: KickBot, message: KickMessage):
 
 async def send_links_in_chat(bot: KickBot):
     """ Timed event to send social links every 30 mins """
-    links = "Youtube: https://youtube.com/eddieoz\n\nKick: https://kick.com/eddieoz"
+    links = "Youtube: https://youtube.com/eddieoz\n\nKick: https://kick.com/eddieoz\n\nSite: https://eddieoz.com"
     await bot.send_text(links)
 
 
@@ -115,31 +115,31 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def aplauso_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '')
+    send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
 
 async def burro_alert (bot: KickBot, message: KickMessage):
-    send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '')
+    send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '', '')
 
 async def creptomoeda_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media1.giphy.com/media/PtdOBG0BD9Vvi/giphy.gif', 'https://firebasestorage.googleapis.com/v0/b/twitch-soundboard.appspot.com/o/sounds%2F3438bca9-880c-4bde-9f19-7e0e0320737c.mp3?alt=media', '')
+    send_alert('https://media1.giphy.com/media/PtdOBG0BD9Vvi/giphy.gif', 'https://firebasestorage.googleapis.com/v0/b/twitch-soundboard.appspot.com/o/sounds%2F3438bca9-880c-4bde-9f19-7e0e0320737c.mp3?alt=media', '', '')
 
 async def no_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media1.giphy.com/media/vyTnNTrs3wqQ0UIvwE/giphy.gif', 'https://www.myinstants.com/media/sounds/no-god-please-no-noooooooooo.mp3', '')
+    send_alert('https://media1.giphy.com/media/vyTnNTrs3wqQ0UIvwE/giphy.gif', 'https://www.myinstants.com/media/sounds/no-god-please-no-noooooooooo.mp3', '', '')
 
 async def nani_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/RLot156RHR0AAAAd/nani-what.gif', 'https://www.myinstants.com/media/sounds/nani_mkANQUf.mp3', '')
+    send_alert('https://media.tenor.com/RLot156RHR0AAAAd/nani-what.gif', 'https://www.myinstants.com/media/sounds/nani_mkANQUf.mp3', '', '')
 
 async def rica_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/0rEqnyTyZToAAAAC/eu-sou-rica-im-rich.gif', 'https://www.myinstants.com/media/sounds/eu-sou-rica_1.mp3', '')
+    send_alert('https://media.tenor.com/0rEqnyTyZToAAAAC/eu-sou-rica-im-rich.gif', 'https://www.myinstants.com/media/sounds/eu-sou-rica_1.mp3', '', '')
 
 async def run_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/5j25wi9o-2YAAAAC/furious-munishkanth.gif', 'https://www.myinstants.com/media/sounds/run-vine-sound-effect_1_8k87k9t.mp3', '')
+    send_alert('https://media.tenor.com/5j25wi9o-2YAAAAC/furious-munishkanth.gif', 'https://www.myinstants.com/media/sounds/run-vine-sound-effect_1_8k87k9t.mp3', '', '')
 
 async def secnagem_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/h9zATR2d9z0AAAAd/elon-musk-%E3%82%A4%E3%83%BC%E3%83%AD%E3%83%B3%E3%83%9E%E3%82%B9%E3%82%AF.gif', 'https://www.myinstants.com/media/sounds/secnagem_ZUkBLxx.mp3', '')
+    send_alert('https://media.tenor.com/h9zATR2d9z0AAAAd/elon-musk-%E3%82%A4%E3%83%BC%E3%83%AD%E3%83%B3%E3%83%9E%E3%82%B9%E3%82%AF.gif', 'https://www.myinstants.com/media/sounds/secnagem_ZUkBLxx.mp3', '', '')
 
 async def tistreza_alert (bot: KickBot, message: KickMessage):
-    send_alert('https://media.tenor.com/tn2SbVbK4moAAAAC/que-tistreza-felipe-davila-debate-presidencial-globo.gif', 'https://www.myinstants.com/media/sounds/que-tistreza.mp3', '')
+    send_alert('https://media.tenor.com/tn2SbVbK4moAAAAC/que-tistreza-felipe-davila-debate-presidencial-globo.gif', 'https://www.myinstants.com/media/sounds/que-tistreza.mp3', '', '')
 
 async def msg_alert (bot: KickBot, message: KickMessage):
     msg = ' '.join(message.args[1:])
@@ -148,8 +148,8 @@ async def msg_alert (bot: KickBot, message: KickMessage):
         'voice': 'Vitoria', 
         'text': f'@{sender} falou: {msg}',
     }
-    url = f'https://api.streamelements.com/kappa/v2/speech?{urlencode(params)}'
-    send_alert('https://media.giphy.com/media/srb6bXZHbgDsc/giphy.gif', url, f'{params["text"]}')
+    audio = 'https://www.myinstants.com/media/sounds/drwho.mp3'
+    send_alert('https://media.giphy.com/media/srb6bXZHbgDsc/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
 
 
 async def switch_alert(bot: KickBot, message: KickMessage):
@@ -163,7 +163,7 @@ async def switch_alert(bot: KickBot, message: KickMessage):
             reply = 'Alerts disabled!'
         await bot.reply_text(message, str(reply))
 
-def send_alert(img, audio, text):
+def send_alert(img, audio, text, tts):
     if (settings['Alerts']['Enable']):
         width = '40%'
         fontFamily = 'Arial'
@@ -172,7 +172,7 @@ def send_alert(img, audio, text):
         borderWidth = 0
         color = 'white'
         duration = 9000
-        parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
+        parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
         url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
         alert = requests.get(url)
 
@@ -206,9 +206,6 @@ if __name__ == '__main__':
     bot.add_command_handler('!secnagem', secnagem_alert)
     bot.add_command_handler('!tistreza', tistreza_alert)
     bot.add_command_handler('!msg', msg_alert)
-
-
-
 
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
