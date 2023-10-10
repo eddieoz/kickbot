@@ -170,8 +170,6 @@ async def switch_alert(bot: KickBot, message: KickMessage):
 
 async def send_alert(img, audio, text, tts):
     if (settings['Alerts']['Enable']):
-        # Create a new lock object        
-        lock.acquire(timeout=15)
         try:
             async with aiohttp.ClientSession() as session:
                 width = '300px'
@@ -188,10 +186,6 @@ async def send_alert(img, audio, text, tts):
                     response_text = await response.text()
         except Exception as e:
             print(f'Error sending alert: {e}')
-        finally:
-            # Release the lock after x seconds
-            Timer(15, lock.release).start()
-
 
 if __name__ == '__main__':
 
