@@ -1,6 +1,9 @@
 import asyncio
 import json
 import logging
+from urllib.parse import quote_plus, urlencode
+import aiohttp
+import requests
 import websockets
 
 from datetime import timedelta
@@ -288,7 +291,28 @@ class KickBot:
         r = send_reply_in_chat(self, original_message, reply_message)
         if r.status_code != 200:
             raise KickBotException(f"An error occurred while sending reply {reply_message!r}")
-
+        
+    async def send_alert(self, img, audio, text, tts):
+        if (settings['Alerts']['Enable']):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    width = '300px'
+                    fontFamily = 'Arial'
+                    fontSize = 30
+                    color = 'gold'
+                    borderColor = 'black'
+                    borderWidth = 2
+                    duration = 9000
+                    parameters = f'gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
+                    url = settings['Alerts']['Host'] + '/trigger_alert?' + parameters + '&api_key=' + settings['Alerts']['ApiKey']
+                    # alert = requests.get(url)
+                    # logging.info(alert.text)
+                    async with session.get(url) as response:
+                        response_text = await response.text()
+                        logging.info(response_text)
+            except Exception as e:
+                print(f'Error sending alert: {e}')
+    
     def current_viewers(self) -> int:
         """
         Retrieve current viewer count for the stream
@@ -333,6 +357,9 @@ class KickBot:
             while True:
                 try:
                     response = await self._recv()
+                    
+                    if response.get('event') == 'App\\Events\\UserBannedEvent':
+                        await self._handle_ban(response)
                     if response.get('event') == 'App\\Events\\ChatMessageEvent':
                         await self._handle_chat_message(response)
                     if response.get('event') == 'App\\Events\\GiftedSubscriptionsEvent':
@@ -361,6 +388,32 @@ class KickBot:
             if r.status_code != 200:
                 raise KickBotException(f"An error occurred while sending message {message!r}")
             logger.info(f"Added {blokitos} to user {gifter} for sub_gifts ({gifted_usernames})")
+
+    async def _handle_ban(self, inbound_message: dict) -> None:
+        """
+        Handles incoming ban events, from the banned user's account and logs the event.
+
+        :param inbound_message: Raw inbound message from socket
+        # 'App\\Events\\UserBannedEvent'
+        # '{"id":"da55e408-c421-40a3-a274-07b031ebe715","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"banned_by":{"id":0,"username":"mzinha","slug":"mzinha"},"expires_at":"2023-10-10T07:56:22+00:00"}'
+        # '{"id":"8fa06ed7-f2cf-4210-8ddb-d497ee661e38","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"banned_by":{"id":0,"username":"mzinha","slug":"mzinha"}}'
+        # 'App\\Events\\UserUnbannedEvent'
+        # '{"id":"7a38feef-b052-4870-8f1a-fd55bbffe38e","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"unbanned_by":{"id":6914823,"username":"mzinha","slug":"mzinha"}}'
+        # '{"id":"9f863fae-a2cc-4124-9ee1-ac56e3ae1569","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"unbanned_by":{"id":6914823,"username":"mzinha","slug":"mzinha"}}'await self._handle_ban(response)
+        """
+        expired = json.loads(inbound_message.get('data')).get('expires_at')
+        if expired != None:
+            user = json.loads(inbound_message.get('data')).get('user').get('username')
+            ban_by = json.loads(inbound_message.get('data')).get('banned_by').get('username')
+            chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
+            # message = f'!points remove @{user} {settings["BanBlokitos"]}'
+            message = f'#tabanido @{user}'
+            r = send_message_in_chat(self, message)
+            if r.status_code != 200:
+                raise KickBotException(f"An error occurred while sending message {message!r}")
+            await self.send_alert('https://media3.giphy.com/media/up8eu7XYylMrPmLwY4/giphy.gif','https://www.myinstants.com/media/sounds/cartoon-hammer.mp3', message.replace('#', ''), message.replace('#', ''))
+            
+            logger.info(f"Ban user {user} by {ban_by}")
 
     async def _handle_chat_message(self, inbound_message: dict) -> None:
         """

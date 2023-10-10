@@ -79,6 +79,10 @@ async def send_links_in_chat(bot: KickBot):
     links = "Youtube: https://youtube.com/eddieoz\n\nKick: https://kick.com/eddieoz\n\nSite: https://eddieoz.com"
     await bot.send_text(links)
 
+async def send_links_livecoins(bot: KickBot):
+    """ Timed event to send social links every 30 mins """
+    links = "Estamos participando da votação da Livecoins! Vote em nós! https://form.respondi.app/pjSDK4qg "
+    await bot.send_text(links)
 
 async def github_link(bot: KickBot, message: KickMessage):
     """ Reply to '!github' command with link to github"""
@@ -223,8 +227,10 @@ if __name__ == '__main__':
     bot.add_message_handler('!alert', switch_alert)
 
     bot.add_timed_event(timedelta(minutes=30), send_links_in_chat)
+    bot.add_timed_event(timedelta(minutes=30), send_links_livecoins)
     bot.add_timed_event(timedelta(minutes=15), say_hello)
     bot.add_timed_event(timedelta(seconds=1), im_back)
+
     
     bot.poll()
     
