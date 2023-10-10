@@ -153,7 +153,7 @@ async def msg_alert (bot: KickBot, message: KickMessage):
         'voice': 'Vitoria', 
         'text': f'@{sender} falou: {msg}',
     }
-    audio = 'https://www.myinstants.com/media/sounds/drwho.mp3'
+    audio = 'https://www.myinstants.com/media/sounds/doctor-who-2.mp3'
     await send_alert('https://media4.giphy.com/media/vs2LP0QZG7Brq/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
 
 
