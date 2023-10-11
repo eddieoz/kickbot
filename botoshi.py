@@ -226,8 +226,8 @@ if __name__ == '__main__':
     bot.add_message_handler('boa noite', night_greeting)
     bot.add_message_handler('!alert', switch_alert)
 
-    bot.add_timed_event(timedelta(minutes=30), send_links_in_chat)
-    bot.add_timed_event(timedelta(minutes=30), send_links_livecoins)
+    bot.add_timed_event(timedelta(minutes=35), send_links_in_chat)
+    bot.add_timed_event(timedelta(minutes=25), send_links_livecoins)
     bot.add_timed_event(timedelta(minutes=15), say_hello)
     bot.add_timed_event(timedelta(seconds=1), im_back)
 
