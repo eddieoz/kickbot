@@ -73,6 +73,13 @@ async def ban_for_word(bot: KickBot, message: KickMessage):
     ban_time = 20
     bot.moderator.timeout_user(sender_username, ban_time)
 
+async def ban_forever(bot: KickBot, message: KickMessage):
+    """ Ban user forever if they say 'xxxx word' """
+    sender_username = message.sender.username
+    ban_time = 0
+    bot.moderator.timeout_user(sender_username, ban_time)
+
+
 
 async def send_links_in_chat(bot: KickBot):
     """ Timed event to send social links every 30 mins """
@@ -220,11 +227,14 @@ if __name__ == '__main__':
     bot.add_command_handler('!secnagem', secnagem_alert)
     bot.add_command_handler('!tistreza', tistreza_alert)
     bot.add_command_handler('!msg', msg_alert)
+    bot.add_command_handler('!alerts', switch_alert)
 
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
-    bot.add_message_handler('!alert', switch_alert)
+    
+    bot.add_message_handler('Abra e não feche a torneira', ban_forever)
+    bot.add_message_handler('Adicione água sanitária', ban_forever)
 
     bot.add_timed_event(timedelta(minutes=35), send_links_in_chat)
     bot.add_timed_event(timedelta(minutes=25), send_links_livecoins)
