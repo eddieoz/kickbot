@@ -233,8 +233,8 @@ if __name__ == '__main__':
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
     
-    bot.add_message_handler('Abra e não feche a torneira', ban_forever)
-    bot.add_message_handler('Adicione água sanitária', ban_forever)
+    bot.add_message_handler('abra e não feche a torneira', ban_forever)
+    bot.add_message_handler('adicione água sanitária', ban_forever)
 
     bot.add_timed_event(timedelta(minutes=35), send_links_in_chat)
     bot.add_timed_event(timedelta(minutes=25), send_links_livecoins)
