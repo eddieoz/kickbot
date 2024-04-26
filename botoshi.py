@@ -64,7 +64,8 @@ async def markov_chain(bot: KickBot, message: KickMessage):
     msg = message.content.split(' ')
     msg.pop(0)
     reply, ret = MarkovChain.generate(bot, msg)
-    await bot.reply_text(message, str(reply))
+    # await bot.reply_text(message, str(reply))
+    await bot.send_text(str(reply))
 
 
 async def ban_for_word(bot: KickBot, message: KickMessage):
@@ -157,6 +158,22 @@ async def secnagem_alert (bot: KickBot, message: KickMessage):
 async def tistreza_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media.tenor.com/tn2SbVbK4moAAAAC/que-tistreza-felipe-davila-debate-presidencial-globo.gif', 'https://www.myinstants.com/media/sounds/que-tistreza.mp3', '', '')
 
+async def went2zero_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://c.tenor.com/-GEbmhD-ca4AAAAC/tenor.gif', 'https://www.myinstants.com/media/sounds/went2zero.mp3', '', '')
+
+async def what_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/LomlJOfsbbQAAAAC/vitalik.gif', 'https://www.myinstants.com/media/sounds/vitalik-whaaaat.mp3', '', '')
+
+async def doida_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/LsWOiOjRbaMAAAAC/sense-marcia.gif', 'https://www.myinstants.com/media/sounds/para-de-ser-doida-marcia-semsitiva.mp3', '', '')
+
+async def risada_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://c.tenor.com/NqTP3bhMQkEAAAAC/tenor.gif', 'https://www.myinstants.com/media/sounds/heres-what-immigrants-think-about-the-wall-original-video-audiotrimmer.mp3', '', '')
+
+async def vergonha_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://c.tenor.com/uWiCz2tqzXAAAAAC/tenor.gif', 'https://www.myinstants.com/media/sounds/jacquin-voce-e-a-vergonha-da-profissao.mp3', '', '')
+
+
 async def msg_alert (bot: KickBot, message: KickMessage):
     msg = ' '.join(message.args[1:])
     sender = message.sender.username.replace('_', '')
@@ -226,8 +243,13 @@ if __name__ == '__main__':
     bot.add_command_handler('!run', run_alert)
     bot.add_command_handler('!secnagem', secnagem_alert)
     bot.add_command_handler('!tistreza', tistreza_alert)
+    bot.add_command_handler('!zero', went2zero_alert)
+    bot.add_command_handler('!what', what_alert)
     bot.add_command_handler('!msg', msg_alert)
-    bot.add_command_handler('!alerts', switch_alert)
+    bot.add_command_handler('!doida', doida_alert)
+    bot.add_command_handler('!risada', risada_alert)
+    bot.add_command_handler('!vergonha', vergonha_alert)
+
 
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
@@ -237,7 +259,7 @@ if __name__ == '__main__':
     bot.add_message_handler('adicione água sanitária', ban_forever)
 
     bot.add_timed_event(timedelta(minutes=35), send_links_in_chat)
-    bot.add_timed_event(timedelta(minutes=25), send_links_livecoins)
+    #bot.add_timed_event(timedelta(minutes=25), send_links_livecoins)
     bot.add_timed_event(timedelta(minutes=15), say_hello)
     bot.add_timed_event(timedelta(seconds=1), im_back)
 
