@@ -195,6 +195,9 @@ async def risada_alert (bot: KickBot, message: KickMessage):
 async def vergonha_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://c.tenor.com/uWiCz2tqzXAAAAAC/tenor.gif', 'https://www.myinstants.com/media/sounds/jacquin-voce-e-a-vergonha-da-profissao.mp3', '', '')
 
+async def certo_isso (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/rEBXmYIAMr0AAAAC/felca-susto.gif', 'https://www.myinstants.com/media/sounds/felca-ta-certo-isso.mp3', '', '')
+
 
 async def msg_alert (bot: KickBot, message: KickMessage):
     msg = ' '.join(message.args[1:])
@@ -273,6 +276,7 @@ if __name__ == '__main__':
     bot.add_command_handler('!doida', doida_alert)
     bot.add_command_handler('!risada', risada_alert)
     bot.add_command_handler('!vergonha', vergonha_alert)
+    bot.add_command_handler('!certo', certo_isso)
 
 
     bot.add_message_handler('bom dia', morning_greeting)
