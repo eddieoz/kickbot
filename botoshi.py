@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 import sys
 sys.path.append('utils/TwitchMarkovChain/')
 
+from utils.repeat_bot import repeat
+
 # Load configurations from settings.json file
 import json
 with open('settings.json') as f:
@@ -65,6 +67,26 @@ async def markov_chain(bot: KickBot, message: KickMessage):
     msg.pop(0)
     reply, ret = MarkovChain.generate(bot, msg)
     # await bot.reply_text(message, str(reply))
+    await bot.send_text(str(reply))
+
+async def repeat_bot_pt(bot: KickBot, message: KickMessage):
+    """ Repete as últimas infos faladas na live """
+    # await bot.reply_text(message, str(reply))
+    # Usar o diretório desejado e o número de linhas
+    directory = "..\\..\\eddieoz twitch\\transcripts\\"
+    n_lines = 150
+    language = 'portuguese'
+    reply = repeat(directory, n_lines, language)
+    await bot.send_text(str(reply))
+
+async def repeat_bot_en(bot: KickBot, message: KickMessage):
+    """ Repete as últimas infos faladas na live """
+    # await bot.reply_text(message, str(reply))
+    # Usar o diretório desejado e o número de linhas
+    directory = "..\\..\\eddieoz twitch\\transcripts\\"
+    n_lines = 150
+    language = 'english'
+    reply = repeat(directory, n_lines, language)
     await bot.send_text(str(reply))
 
 
@@ -232,6 +254,8 @@ if __name__ == '__main__':
     bot.add_command_handler('!time', current_time)
     bot.add_command_handler('!github', github_link)
     bot.add_command_handler('!b', markov_chain)
+    bot.add_command_handler('!repete', repeat_bot_pt)
+    bot.add_command_handler('!repeat', repeat_bot_en)
 
     # Sound alerts
     bot.add_command_handler('!aplauso', aplauso_alert)
