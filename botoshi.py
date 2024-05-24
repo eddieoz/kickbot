@@ -74,7 +74,7 @@ async def repeat_bot_pt(bot: KickBot, message: KickMessage):
     # await bot.reply_text(message, str(reply))
     # Usar o diretório desejado e o número de linhas
     directory = "..\\..\\eddieoz twitch\\transcripts\\"
-    n_lines = 150
+    n_lines = 50
     language = 'portuguese'
     reply = repeat(directory, n_lines, language)
     await bot.send_text(str(reply))
@@ -84,7 +84,7 @@ async def repeat_bot_en(bot: KickBot, message: KickMessage):
     # await bot.reply_text(message, str(reply))
     # Usar o diretório desejado e o número de linhas
     directory = "..\\..\\eddieoz twitch\\transcripts\\"
-    n_lines = 150
+    n_lines = 50
     language = 'english'
     reply = repeat(directory, n_lines, language)
     await bot.send_text(str(reply))
@@ -198,6 +198,9 @@ async def vergonha_alert (bot: KickBot, message: KickMessage):
 async def certo_isso (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/rEBXmYIAMr0AAAAC/felca-susto.gif', 'https://www.myinstants.com/media/sounds/felca-ta-certo-isso.mp3', '', '')
 
+async def triste_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/I1R_uwk05DAAAAAC/sad-boys-rain.gif', 'https://www.myinstants.com/media/sounds/naruto-sad-music-instant.mp3', '', '')
+
 
 async def msg_alert (bot: KickBot, message: KickMessage):
     msg = ' '.join(message.args[1:])
@@ -277,6 +280,7 @@ if __name__ == '__main__':
     bot.add_command_handler('!risada', risada_alert)
     bot.add_command_handler('!vergonha', vergonha_alert)
     bot.add_command_handler('!certo', certo_isso)
+    bot.add_command_handler('!triste', triste_alert)
 
 
     bot.add_message_handler('bom dia', morning_greeting)
