@@ -1,3 +1,4 @@
+import logging
 from time import sleep
 import requests
 from urllib.parse import urlencode, quote_plus
@@ -94,13 +95,13 @@ async def ban_for_word(bot: KickBot, message: KickMessage):
     """ Ban user for 20 minutes if they say 'xxxx word' """
     sender_username = message.sender.username
     ban_time = 20
-    bot.moderator.timeout_user(sender_username, ban_time)
+    bot.moderator.permaban(sender_username, ban_time)
 
 async def ban_forever(bot: KickBot, message: KickMessage):
     """ Ban user forever if they say 'xxxx word' """
     sender_username = message.sender.username
     ban_time = 0
-    bot.moderator.timeout_user(sender_username, ban_time)
+    bot.moderator.permaban(sender_username)
 
 async def ban_by_bot_message(bot: KickBot, message: KickMessage):
     """ Ban user forever if they say 'xxxx word' """
@@ -109,7 +110,7 @@ async def ban_by_bot_message(bot: KickBot, message: KickMessage):
         content = message.content
         if "Thank you for the follow," in content:
             username = content.split(",")[1].strip().replace("!", "")
-            bot.moderator.timeout_user(username, 0)
+            bot.moderator.permaban(username)
 
 async def send_links_in_chat(bot: KickBot):
     """ Timed event to send social links every 30 mins """
@@ -294,7 +295,7 @@ if __name__ == '__main__':
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
     bot.add_message_handler('RabbiRoth', ban_by_bot_message)
-    
+
     bot.add_message_handler('abra e não feche a torneira', ban_forever)
     bot.add_message_handler('adicione água sanitária', ban_forever)
 

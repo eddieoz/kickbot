@@ -358,7 +358,7 @@ class KickBot:
             while True:
                 try:
                     response = await self._recv()
-                    
+
                     if response.get('event') == 'App\\Events\\UserBannedEvent':
                         await self._handle_ban(response)
                     if response.get('event') == 'App\\Events\\ChatMessageEvent':
@@ -419,12 +419,13 @@ class KickBot:
             user = json.loads(inbound_message.get('data')).get('user').get('username')
             ban_by = json.loads(inbound_message.get('data')).get('banned_by').get('username')
             chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
+            
             # message = f'!points remove @{user} {settings["BanBlokitos"]}'
-            message = f'#AVADAA_KEDAVRAA  @{user}'
+            message = f'#AVADAA_KEDAVRAA @{user}'
             r = send_message_in_chat(self, message)
-            if r.status_code != 200:
-                raise KickBotException(f"An error occurred while sending message {message!r}")
-            await self.send_alert('https://media4.giphy.com/media/54Q8WBE4zDN5e/giphy.gif','https://www.myinstants.com/media/sounds/avadaa-kedavraa.mp3', message.replace('#', ''), message.replace('#', ''))
+            # if r.status_code != 200:
+            #     raise KickBotException(f"An error occurred while sending message {message!r}")
+            # await self.send_alert('https://media4.giphy.com/media/54Q8WBE4zDN5e/giphy.gif','https://www.myinstants.com/media/sounds/avadaa-kedavraa.mp3', message.replace('#', ''), message.replace('#', ''))
             
             logger.info(f"Ban user {user} by {ban_by}")
 
