@@ -352,6 +352,7 @@ class KickBot:
 
         async with websockets.connect(self._ws_uri) as self.sock:
             connection_response = await self._recv()
+            
             await self._handle_first_connect(connection_response)
             await self._join_chatroom(self.chatroom_id)
             while True:
