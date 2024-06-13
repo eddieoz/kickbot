@@ -295,6 +295,10 @@ if __name__ == '__main__':
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
     bot.add_message_handler('RabbiRoth', ban_by_bot_message)
+    bot.add_message_handler('RABBlROTH', ban_by_bot_message)
+    bot.add_message_handler('THSCH', ban_by_bot_message)
+    bot.add_message_handler('thsch', ban_by_bot_message)
+    
 
     bot.add_message_handler('abra e não feche a torneira', ban_forever)
     bot.add_message_handler('adicione água sanitária', ban_forever)
