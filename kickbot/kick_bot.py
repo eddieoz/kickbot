@@ -358,6 +358,20 @@ class KickBot:
             while True:
                 try:
                     response = await self._recv()
+                    logger.info(f"System message {response.get('event')}")
+                    
+                    if response.get('event') == 'App\Events\ChatMessageEvent':
+                        message = str(json.loads(response.get('data')).get('content'))
+                        sender = str(json.loads(response.get('data')).get('sender').get('username'))
+                        if 'gerard' in message.casefold():
+                            try:
+                                req = requests.post("http://127.0.0.1:7862/update_chat", json={'nickname': sender, 'context': message})
+                                if req.status_code == 200:
+                                    print("Context updated successfully.")
+                                else:
+                                    print(f"Failed to update context: {req.status_code}")
+                            except Exception as e:
+                                print(f"Error updating context: {e}")
 
                     if response.get('event') == 'App\\Events\\UserBannedEvent':
                         await self._handle_ban(response)
@@ -384,7 +398,7 @@ class KickBot:
 
         if settings['GiftBlokitos'] != 0:
             blokitos = len(gifted_usernames) * settings['GiftBlokitos']
-            message = f'!blokitos add @{gifter} {blokitos}'
+            message = f'!points add @{gifter} {blokitos}'
             r = send_message_in_chat(self, message)
             if r.status_code != 200:
                 raise KickBotException(f"An error occurred while sending message {message!r}")

@@ -67,6 +67,17 @@ async def markov_chain(bot: KickBot, message: KickMessage):
     msg = message.content.split(' ')
     msg.pop(0)
     reply, ret = MarkovChain.generate(bot, msg)
+
+    if 'gerard' in reply.casefold():
+        try:
+            response = requests.post("http://127.0.0.1:7862/update_botoshi", json={'botoshi': reply.casefold().replace("gerard", "Gerrár Aithen")})
+            if response.status_code == 200:
+                print("Context updated successfully.")
+            else:
+                print(f"Failed to update context: {response.status_code}")
+        except Exception as e:
+            print(f"Error updating context: {e}")
+
     # await bot.reply_text(message, str(reply))
     await bot.send_text(str(reply))
 
@@ -211,14 +222,17 @@ async def triste_alert (bot: KickBot, message: KickMessage):
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
-    msg = ' '.join(message.args[1:])
-    sender = message.sender.username.replace('_', '')
-    params = {
-        'voice': 'Vitoria', 
-        'text': f'@{sender} falou: {msg}',
-    }
-    audio = 'https://www.myinstants.com/media/sounds/doctor-who-2.mp3'
-    await send_alert('https://media4.giphy.com/media/vs2LP0QZG7Brq/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
+    reply = 'Use o LivePix e mande sua mensagem! :)'
+    await bot.reply_text(message, reply)
+    # await bot.send_text("Teste: use o qr-code :)")
+    # msg = ' '.join(message.args[1:])
+    # sender = message.sender.username.replace('_', '')
+    # params = {
+    #     'voice': 'Vitoria', 
+    #     'text': f'@{sender} falou: {msg}',
+    # }
+    # audio = 'https://www.myinstants.com/media/sounds/doctor-who-2.mp3'
+    # await send_alert('https://media4.giphy.com/media/vs2LP0QZG7Brq/giphy.gif', audio, f'{params["text"]}', f'{params["text"]}')
 
 
 async def switch_alert(bot: KickBot, message: KickMessage):
@@ -294,11 +308,12 @@ if __name__ == '__main__':
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
-    bot.add_message_handler('RabbiRoth', ban_by_bot_message)
-    bot.add_message_handler('RABBlROTH', ban_by_bot_message)
-    bot.add_message_handler('THSCH', ban_by_bot_message)
     bot.add_message_handler('thsch', ban_by_bot_message)
-    
+    bot.add_message_handler('rabb', ban_by_bot_message)
+    bot.add_message_handler('ytlive', ban_by_bot_message)
+    bot.add_message_handler('adolp', ban_by_bot_message)
+    bot.add_message_handler('hate', ban_by_bot_message)
+    bot.add_message_handler('etler', ban_by_bot_message)
 
     bot.add_message_handler('abra e não feche a torneira', ban_forever)
     bot.add_message_handler('adicione água sanitária', ban_forever)

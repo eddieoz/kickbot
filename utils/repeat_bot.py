@@ -24,10 +24,10 @@ def repeat(directory, n_lines, language):
             for line in last_lines:
                 message += line.rstrip()     
             # Point to the local server
-            client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm-studio")
+            client = OpenAI(base_url="http://192.168.0.13:1234/v1", api_key="lm-studio")
 
             completion = client.chat.completions.create(
-                model="lmstudio-ai/gemma-2b-it-GGUF",
+                model="lmstudio-ai/llama3-instruct",
                 messages=[
                     {"role": "system", "content": "Task: Summarize the following content. Lenght: 3-5 sentences. Requirements: capture the main ideas and key points; easy to understand; summary should be free from ambiguity. Summarize in  " + language + " language. Content: "},
                     {"role": "user", "content": message}
