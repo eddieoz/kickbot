@@ -398,7 +398,7 @@ class KickBot:
 
         if settings['GiftBlokitos'] != 0:
             blokitos = len(gifted_usernames) * settings['GiftBlokitos']
-            message = f'!points add @{gifter} {blokitos}'
+            message = f'!subgift_add {gifter} {blokitos}'
             r = send_message_in_chat(self, message)
             if r.status_code != 200:
                 raise KickBotException(f"An error occurred while sending message {message!r}")
