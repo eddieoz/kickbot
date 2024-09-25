@@ -173,7 +173,7 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
@@ -229,6 +229,9 @@ async def cadeira_alert (bot: KickBot, message: KickMessage):
 
 async def inveja_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/1Nr6H8HTWfUAAAAC/jim-chewing.gif', 'https://www.myinstants.com/media/sounds/o-a-inveja.mp3', '', '')
+
+async def didi_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://tenor.com/view/didi-didicao-zaaz-dog-cachorro-gif-20779949', 'https://www.myinstants.com/media/sounds/risada-de-zacarias.mp3', '', '')
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
@@ -316,6 +319,7 @@ if __name__ == '__main__':
     bot.add_command_handler('!triste', triste_alert)
     bot.add_command_handler('!cadeira', cadeira_alert)
     bot.add_command_handler('!inveja', inveja_alert)
+    bot.add_command_handler('!didi', didi_alert)
 
 
     bot.add_message_handler('bom dia', morning_greeting)
