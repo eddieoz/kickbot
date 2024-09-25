@@ -172,6 +172,10 @@ async def im_back(bot: KickBot):
 
 
 # Sound alerts
+async def sons_alert (bot: KickBot, message: KickMessage):
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja"
+    await bot.send_text(reply)
+
 async def aplauso_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
 
@@ -219,6 +223,12 @@ async def certo_isso (bot: KickBot, message: KickMessage):
 
 async def triste_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/I1R_uwk05DAAAAAC/sad-boys-rain.gif', 'https://www.myinstants.com/media/sounds/naruto-sad-music-instant.mp3', '', '')
+
+async def cadeira_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/fe0xysTdZz0AAAAC/datena-cadeira.gif', 'https://www.myinstants.com/media/sounds/crash-oh-oh.mp3', '', '')
+
+async def inveja_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/1Nr6H8HTWfUAAAAC/jim-chewing.gif', 'https://www.myinstants.com/media/sounds/o-a-inveja.mp3', '', '')
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
@@ -286,6 +296,7 @@ if __name__ == '__main__':
     bot.add_command_handler('!repeat', repeat_bot_en)
 
     # Sound alerts
+    bot.add_command_handler('!sons', sons_alert)
     bot.add_command_handler('!aplauso', aplauso_alert)
     bot.add_command_handler('!burro', burro_alert)
     bot.add_command_handler('!creptomoeda', creptomoeda_alert)
@@ -303,6 +314,8 @@ if __name__ == '__main__':
     bot.add_command_handler('!vergonha', vergonha_alert)
     bot.add_command_handler('!certo', certo_isso)
     bot.add_command_handler('!triste', triste_alert)
+    bot.add_command_handler('!cadeira', cadeira_alert)
+    bot.add_command_handler('!inveja', inveja_alert)
 
 
     bot.add_message_handler('bom dia', morning_greeting)
