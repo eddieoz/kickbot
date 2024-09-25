@@ -167,6 +167,7 @@ cython_debug/
 # Blacklist
 # This file should be automatically generated at launch if not created already
 blacklist.txt
+blacklist*
 
 # Settings
 # This file should be automatically generated at launch if not created already
