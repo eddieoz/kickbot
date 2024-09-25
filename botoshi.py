@@ -231,7 +231,7 @@ async def inveja_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/1Nr6H8HTWfUAAAAC/jim-chewing.gif', 'https://www.myinstants.com/media/sounds/o-a-inveja.mp3', '', '')
 
 async def didi_alert (bot: KickBot, message: KickMessage):
-    await send_alert('https://tenor.com/view/didi-didicao-zaaz-dog-cachorro-gif-20779949', 'https://www.myinstants.com/media/sounds/risada-de-zacarias.mp3', '', '')
+    await send_alert('https://media1.tenor.com/m/CtBMikB_xrQAAAAd/didi-didicao.gif', 'https://www.myinstants.com/media/sounds/risada-de-zacarias.mp3', '', '')
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
