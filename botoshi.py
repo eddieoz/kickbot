@@ -173,7 +173,7 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
@@ -225,13 +225,20 @@ async def triste_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/I1R_uwk05DAAAAAC/sad-boys-rain.gif', 'https://www.myinstants.com/media/sounds/naruto-sad-music-instant.mp3', '', '')
 
 async def cadeira_alert (bot: KickBot, message: KickMessage):
-    await send_alert('https://media1.tenor.com/m/fe0xysTdZz0AAAAC/datena-cadeira.gif', 'https://www.myinstants.com/media/sounds/crash-oh-oh.mp3', '', '')
+    await send_alert('https://media1.tenor.com/m/fe0xysTdZz0AAAAC/datena-cadeira.gif', 'https://www.myinstants.com/media/sounds/one-punchhhhh-one-punchhhhh.mp3', '', '')
 
 async def inveja_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/1Nr6H8HTWfUAAAAC/jim-chewing.gif', 'https://www.myinstants.com/media/sounds/o-a-inveja.mp3', '', '')
 
 async def didi_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/CtBMikB_xrQAAAAd/didi-didicao.gif', 'https://www.myinstants.com/media/sounds/risada-de-zacarias.mp3', '', '')
+
+async def elon_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://c.tenor.com/dT8haFvTVyEAAAAd/tenor.gif', 'https://www.myinstants.com/media/sounds/elon-musk-1.mp3', '', '')
+
+async def safado_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://i.giphy.com/mK4yuNnIuXKty9GDyW.webp', 'https://www.myinstants.com/media/sounds/cachorro-safado.mp3', '', '')
+
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
@@ -320,6 +327,8 @@ if __name__ == '__main__':
     bot.add_command_handler('!cadeira', cadeira_alert)
     bot.add_command_handler('!inveja', inveja_alert)
     bot.add_command_handler('!didi', didi_alert)
+    bot.add_command_handler('!elon', elon_alert)
+    bot.add_command_handler('!safado', safado_alert)
 
 
     bot.add_message_handler('bom dia', morning_greeting)
