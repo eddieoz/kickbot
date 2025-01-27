@@ -71,7 +71,7 @@ class KickClient:
             case 419:
                 raise KickAuthException("Csrf Error:", login_data)
             case 403:
-                raise KickAuthException("Cloudflare blocked (gay). Might need to set a proxy. Response:", login_data)
+                raise KickAuthException("Cloudflare blocked. Might need to set a proxy. Response:", login_data)
             case _:
                 raise KickAuthException(f"Unexpected Response. Status Code: {login_status} | Response: {login_data}")
         logger.info("Login Successful...")

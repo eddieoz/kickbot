@@ -173,11 +173,12 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
-    await send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
+    # await send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
+    await send_alert('https://media1.tenor.com/m/KGz3fTqyJFkAAAAd/elon-musk-barron-trump.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
 
 async def burro_alert (bot: KickBot, message: KickMessage):
     await send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '', '')
@@ -238,6 +239,9 @@ async def elon_alert (bot: KickBot, message: KickMessage):
 
 async def safado_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://i.giphy.com/mK4yuNnIuXKty9GDyW.webp', 'https://www.myinstants.com/media/sounds/cachorro-safado.mp3', '', '')
+
+async def viagem_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/xXkJHjznKPoAAAAd/elon-musk-tripping.gif', 'https://www.myinstants.com/media/sounds/viagem.mp3', '', '')
 
 
 
@@ -324,11 +328,13 @@ if __name__ == '__main__':
     bot.add_command_handler('!vergonha', vergonha_alert)
     bot.add_command_handler('!certo', certo_isso)
     bot.add_command_handler('!triste', triste_alert)
-    bot.add_command_handler('!cadeira', cadeira_alert)
+    # bot.add_command_handler('!cadeira', cadeira_alert)
     bot.add_command_handler('!inveja', inveja_alert)
     bot.add_command_handler('!didi', didi_alert)
     bot.add_command_handler('!elon', elon_alert)
     bot.add_command_handler('!safado', safado_alert)
+    bot.add_command_handler('!viagem', viagem_alert)
+
 
 
     bot.add_message_handler('bom dia', morning_greeting)
