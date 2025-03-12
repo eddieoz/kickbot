@@ -70,7 +70,7 @@ async def markov_chain(bot: KickBot, message: KickMessage):
 
     if 'gerard' in reply.casefold():
         try:
-            response = requests.post("http://127.0.0.1:7862/update_botoshi", json={'botoshi': reply.casefold().replace("gerard", "Gerrár Aithen")})
+            response = requests.post("http://192.168.0.30:7862/update_botoshi", json={'botoshi': reply.casefold().replace("gerard", "Gerrár Aithen")})
             if response.status_code == 200:
                 print("Context updated successfully.")
             else:
@@ -173,7 +173,7 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem !laele"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
@@ -242,6 +242,12 @@ async def safado_alert (bot: KickBot, message: KickMessage):
 
 async def viagem_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/xXkJHjznKPoAAAAd/elon-musk-tripping.gif', 'https://www.myinstants.com/media/sounds/viagem.mp3', '', '')
+
+async def laele_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/zJxKn-nsy-wAAAAC/rock-sus.gif', 'https://www.myinstants.com/media/sounds/la-ele-de-novo.mp3', '', '')
+
+async def morrediabo_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/zJxKn-nsy-wAAAAC/rock-sus.gif', 'https://www.myinstants.com/media/sounds/la-ele-de-novo.mp3', '', '')
 
 
 
@@ -334,6 +340,7 @@ if __name__ == '__main__':
     bot.add_command_handler('!elon', elon_alert)
     bot.add_command_handler('!safado', safado_alert)
     bot.add_command_handler('!viagem', viagem_alert)
+    bot.add_command_handler('!laele', laele_alert)
 
 
 

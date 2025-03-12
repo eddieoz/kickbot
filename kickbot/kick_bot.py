@@ -358,14 +358,15 @@ class KickBot:
             while True:
                 try:
                     response = await self._recv()
-                    logger.info(f"System message {response.get('event')}")
+                    # logger.info(f"System message {response.get('event')}")
+                    logger.info(f"System message {response}")
                     
                     if response.get('event') == 'App\Events\ChatMessageEvent':
                         message = str(json.loads(response.get('data')).get('content'))
                         sender = str(json.loads(response.get('data')).get('sender').get('username'))
                         if 'gerard' in message.casefold():
                             try:
-                                req = requests.post("http://127.0.0.1:7862/update_chat", json={'nickname': sender, 'context': message})
+                                req = requests.post("http://192.168.0.15:7862/update_chat", json={'nickname': sender, 'context': message})
                                 if req.status_code == 200:
                                     print("Context updated successfully.")
                                 else:
@@ -377,32 +378,47 @@ class KickBot:
                         await self._handle_ban(response)
                     if response.get('event') == 'App\\Events\\ChatMessageEvent':
                         await self._handle_chat_message(response)
-                    if response.get('event') == 'App\\Events\\GiftedSubscriptionsEvent':
-                        # {'event': 'App\\Events\\GiftedSubscriptionsEvent', 
-                        # 'data': '{"chatroom_id":1164726,"gifted_usernames":["Khalek"],"gifter_username":"eddieoz"}', 'channel': 'chatrooms.1164726.v2'}
-                        await self._handle_gifted_subscriptions(response)
+                    # if response.get('event') == 'App\\Events\\GiftedSubscriptionsEvent':
+                    #     # {'event': 'App\\Events\\GiftedSubscriptionsEvent', 
+                    #     # 'data': '{"chatroom_id":1164726,"gifted_usernames":["Khalek"],"gifter_username":"eddieoz"}', 'channel': 'chatrooms.1164726.v2'}
+                    #     await self._handle_gifted_subscriptions(response)
                 except asyncio.exceptions.CancelledError:
                     break
         logger.info(f"Disconnected from websocket {self._socket_id}")
         self._is_active = False
 
-    async def _handle_gifted_subscriptions(self, inbound_message: dict) -> None:
+    async def _handle_gifted_subscriptions(self, gifter: str, amount: int) -> None:
         """
         Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
 
-        :param inbound_message: Raw inbound message from socket
+        :param gifter: Username of the gifter
+        :param amount: Number of subscriptions gifted
         """
-        gifter = json.loads(inbound_message.get('data')).get('gifter_username')
-        gifted_usernames = json.loads(inbound_message.get('data')).get('gifted_usernames')
-        chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
-
         if settings['GiftBlokitos'] != 0:
-            blokitos = len(gifted_usernames) * settings['GiftBlokitos']
+            blokitos = amount * settings['GiftBlokitos']
             message = f'!subgift_add {gifter} {blokitos}'
             r = send_message_in_chat(self, message)
             if r.status_code != 200:
                 raise KickBotException(f"An error occurred while sending message {message!r}")
-            logger.info(f"Added {blokitos} to user {gifter} for sub_gifts ({gifted_usernames})")
+            logger.info(f"Added {blokitos} to user {gifter} for {amount} sub_gifts")
+
+    # async def _handle_gifted_subscriptions(self, inbound_message: dict) -> None:
+    #     """
+    #     Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
+
+    #     :param inbound_message: Raw inbound message from socket
+    #     """
+    #     gifter = json.loads(inbound_message.get('data')).get('gifter_username')
+    #     gifted_usernames = json.loads(inbound_message.get('data')).get('gifted_usernames')
+    #     chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
+
+    #     if settings['GiftBlokitos'] != 0:
+    #         blokitos = len(gifted_usernames) * settings['GiftBlokitos']
+    #         message = f'!subgift_add {gifter} {blokitos}'
+    #         r = send_message_in_chat(self, message)
+    #         if r.status_code != 200:
+    #             raise KickBotException(f"An error occurred while sending message {message!r}")
+    #         logger.info(f"Added {blokitos} to user {gifter} for sub_gifts ({gifted_usernames})")
 
     async def _handle_ban(self, inbound_message: dict) -> None:
         """
@@ -460,6 +476,24 @@ class KickBot:
         # create a variable in the format var['message'] = content
         
         MarkovChain.message_handler(self, content)
+
+        # Check if the message is a gifted subscription message and sent by 'Kicklet'
+        if (message.sender.username == "Kicklet" and 
+            "thank you" in content and 
+            "for the gifted" in content and 
+            "subscriptions" in content):
+            try:
+                # Extract the gifter username and the number of subscriptions
+                parts = content.split()
+                gifter = parts[2].rstrip(',')  # The gifter's username is the third word, after "Thank you,"
+                amount_index = parts.index("gifted") + 1  # The amount is the word after "gifted"
+                amount = int(parts[amount_index])  # Convert the amount to an integer
+                
+                # Call the _handle_gifted_subscriptions method
+                await self._handle_gifted_subscriptions(gifter, amount)
+            except (IndexError, ValueError) as e:
+                logger.error(f"Error parsing gifted subscription message: {e}")
+
 
         if content in self.handled_messages:
             message_func = self.handled_messages[content]
