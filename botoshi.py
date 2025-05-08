@@ -173,7 +173,7 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem !laele"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem !laele !chato"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
@@ -248,6 +248,9 @@ async def laele_alert (bot: KickBot, message: KickMessage):
 
 async def morrediabo_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/zJxKn-nsy-wAAAAC/rock-sus.gif', 'https://www.myinstants.com/media/sounds/la-ele-de-novo.mp3', '', '')
+
+async def chato_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://www.eddieoz.com/content/images/2025/05/media.gif', 'https://www.myinstants.com/media/sounds/chato_1CGBysf.mp3', 'Alerta de inconveniencia', 'Chato Chato Chato')
 
 
 
@@ -341,6 +344,7 @@ if __name__ == '__main__':
     bot.add_command_handler('!safado', safado_alert)
     bot.add_command_handler('!viagem', viagem_alert)
     bot.add_command_handler('!laele', laele_alert)
+    bot.add_command_handler('!chato', chato_alert)
 
 
 

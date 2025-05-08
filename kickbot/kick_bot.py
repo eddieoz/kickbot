@@ -43,6 +43,12 @@ class KickBot:
     Main class for interacting with the Bot API.
     """
     def __init__(self, username: str, password: str) -> None:
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        self.logger.addHandler(handler)
+
         self.client: KickClient = KickClient(username, password)
         self._ws_uri = get_ws_uri()
         self._socket_id: Optional[str] = None
@@ -287,10 +293,19 @@ class KickBot:
         """
         if not type(reply_message) == str or reply_message.strip() == "":
             raise KickBotException("Invalid reply message. Must be a non empty string.")
+        
+        # Check if the reply message contains '@@Restream'
+        if '@@Restream' in reply_message:
+            self.logger.warning(f"Skipping reply to avoid breaking: {reply_message!r}")
+            return
+
         logger.debug(f"Sending reply: {reply_message!r}")
-        r = send_reply_in_chat(self, original_message, reply_message)
-        if r.status_code != 200:
-            raise KickBotException(f"An error occurred while sending reply {reply_message!r}")
+        try:
+            r = send_reply_in_chat(self, original_message, reply_message)
+            if r.status_code != 200:
+                raise KickBotException(f"An error occurred while sending reply {reply_message!r}")
+        except Exception as e:
+            raise KickBotException(f"An error occurred while sending reply {reply_message!r}") from e
         
     async def send_alert(self, img, audio, text, tts):
         if (settings['Alerts']['Enable']):
@@ -366,7 +381,7 @@ class KickBot:
                         sender = str(json.loads(response.get('data')).get('sender').get('username'))
                         if 'gerard' in message.casefold():
                             try:
-                                req = requests.post("http://192.168.0.15:7862/update_chat", json={'nickname': sender, 'context': message})
+                                req = requests.post("http://192.168.0.30:7862/update_chat", json={'nickname': sender, 'context': message})
                                 if req.status_code == 200:
                                     print("Context updated successfully.")
                                 else:
