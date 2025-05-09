@@ -4,6 +4,8 @@ Tests for KickBot integration, particularly with KickEventManager.
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from pytest_asyncio import fixture as async_fixture
+import aiohttp # Ensure aiohttp is imported for spec
 
 # Adjust import paths as necessary
 from kickbot.kick_bot import KickBot
@@ -26,8 +28,9 @@ DEFAULT_BOT_SETTINGS = {
     "KickWebhookPath": "/kick/testevents",
     "KickWebhookPort": 8888,
     "KickEventsToSubscribe": [
-        {"name": "channel.subscribed", "version": 1},
-        {"name": "channel.followed", "version": 1}
+        {"name": "channel.followed", "version": 1},
+        {"name": "channel.subscription.new", "version": 1},
+        {"name": "channel.subscription.gifts", "version": 1}
     ],
     "KickStreamer": "teststreamer", # Needed for set_streamer
     # Markov Chain specific settings (minimal for these tests)
@@ -48,7 +51,8 @@ DEFAULT_BOT_SETTINGS = {
     "EnableGenerateCommand": False,
     "SentenceSeparator": " - ",
     "AllowGenerateParams": False,
-    "GenerateCommands": ["!g"]
+    "GenerateCommands": ["!g"],
+    "FeatureFlags": {"EnableNewWebhookEventSystem": True, "DisableLegacyGiftEventHandling": False}
 }
 
 @pytest.fixture
@@ -67,43 +71,79 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv("KICK_REDIRECT_URI", "http://localhost/env_callback")
     monkeypatch.setenv("KICK_SCOPES", "events:subscribe user:read chatroom:read")
 
+@async_fixture
+async def mock_aiohttp_session():
+    mock_session = AsyncMock(spec=aiohttp.ClientSession)
+    # If it needs to be used in an 'async with' block, it might need __aenter__ and __aexit__ mocked
+    # For now, just providing the mock instance
+    yield mock_session
+    # Add cleanup if necessary, e.g., await mock_session.close() if it were a real session
+
 @pytest.fixture
-async def kick_bot_instance(mock_settings_file, mock_env_vars):
+def mock_os_path_exists():
+    with patch('os.path.exists') as mock_exists:
+        yield mock_exists
+
+@pytest.fixture
+def mock_builtin_open():
+    with patch('builtins.open', new_callable=MagicMock) as mock_open:
+        yield mock_open
+
+@pytest.fixture
+def MockKickClient():
+    return MagicMock(spec=KickClient)
+
+@pytest.fixture
+def MockKickAuthManager():
+    # ... (content of this fixture, ensure return_value has necessary methods like get_valid_token)
+    mock = MagicMock(spec=KickAuthManager)
+    mock.return_value.get_valid_token = AsyncMock(return_value="test_token")
+    return mock
+
+@pytest.fixture
+def MockKickEventManager():
+    return MagicMock(spec=KickEventManager)
+
+@pytest.fixture
+def MockKickWebhookHandler():
+    return MagicMock(spec=KickWebhookHandler)
+
+@async_fixture
+async def kick_bot_instance(mock_aiohttp_session, mock_os_path_exists, mock_builtin_open, MockKickClient, MockKickAuthManager, MockKickEventManager, MockKickWebhookHandler):
     '''Fixture to create a KickBot instance with most dependencies mocked at a high level.
        Further patching might be needed for specific method calls within dependencies.
     '''
     # Patch dependencies that are instantiated by KickBot or its helpers
-    with patch('kickbot.kick_bot.KickClient', spec=KickClient) as MockKickClient, \
-         patch('kickbot.kick_bot.KickAuthManager', spec=KickAuthManager) as MockKickAuthManager, \
-         patch('kickbot.kick_bot.KickEventManager', spec=KickEventManager) as MockKickEventManager, \
-         patch('kickbot.kick_bot.KickWebhookHandler', spec=KickWebhookHandler) as MockKickWebhookHandler, \
+    with patch('kickbot.kick_bot.KickClient', spec=KickClient) as MockKickClient_fixture, \
+         patch('kickbot.kick_bot.KickAuthManager', spec=KickAuthManager) as MockKickAuthManager_fixture, \
+         patch('kickbot.kick_bot.KickEventManager', spec=KickEventManager) as MockKickEventManager_fixture, \
+         patch('kickbot.kick_bot.KickWebhookHandler', spec=KickWebhookHandler) as MockKickWebhookHandler_fixture, \
          patch('kickbot.kick_bot.get_ws_uri', return_value="ws://localhost:faker") as mock_get_ws, \
          patch('kickbot.kick_bot.websockets.connect', new_callable=AsyncMock) as mock_ws_connect, \
          patch('kickbot.kick_bot.Settings') as MockMarkovSettings, \
          patch('kickbot.kick_bot.Database') as MockMarkovDatabase, \
-         patch('kickbot.kick_bot.TwitchWebsocket') as MockTwitchWebsocket, \
+         patch('kickbot.kick_bot.TwitchWebsocket') as MockTwitchWebsocket_fixture, \
          patch('kickbot.kick_bot.LoopingTimer') as MockLoopingTimer: 
         
         # Setup mocks for KickClient
         mock_kc_instance = AsyncMock(spec=KickClient)
         mock_kc_instance.session = AsyncMock(spec=aiohttp.ClientSession) # If session is directly accessed
-        MockKickClient.return_value = mock_kc_instance
+        MockKickClient_fixture.return_value = mock_kc_instance
         
         # Setup mocks for KickAuthManager
         mock_kam_instance = AsyncMock(spec=KickAuthManager)
         mock_kam_instance.get_valid_token = AsyncMock(return_value="test_bot_token")
-        MockKickAuthManager.return_value = mock_kam_instance
+        MockKickAuthManager_fixture.return_value = mock_kam_instance
         
         # Setup mocks for KickEventManager
         mock_kem_instance = AsyncMock(spec=KickEventManager)
         mock_kem_instance.resubscribe_to_configured_events = AsyncMock(return_value=True)
         mock_kem_instance.clear_all_my_broadcaster_subscriptions = AsyncMock(return_value=True)
-        MockKickEventManager.return_value = mock_kem_instance
+        MockKickEventManager_fixture.return_value = mock_kem_instance
         
         # Setup mocks for KickWebhookHandler
         mock_kwh_instance = AsyncMock(spec=KickWebhookHandler)
-        # MockKWH.handle_webhook might be needed if it's directly called/tested
-        MockKickWebhookHandler.return_value = mock_kwh_instance
+        MockKickWebhookHandler_fixture.return_value = mock_kwh_instance
 
         # Mock for websockets.connect within _poll
         mock_ws_connection = AsyncMock()
@@ -112,25 +152,21 @@ async def kick_bot_instance(mock_settings_file, mock_env_vars):
         mock_ws_connect.return_value.__aenter__.return_value = mock_ws_connection # for async with
 
         bot = KickBot(username=DEFAULT_BOT_SETTINGS["KickEmail"], password=DEFAULT_BOT_SETTINGS["KickPass"])
+        bot.set_settings(DEFAULT_BOT_SETTINGS)
         
         # Simulate set_streamer call to populate streamer_info needed for EventManager init in run()
-        # This part requires get_streamer_info etc. to be patched or self.client to be ready.
-        # For this test, let's assume streamer_info is set manually for simplicity for now, or patch get_streamer_info
         with patch('kickbot.kick_bot.get_streamer_info', return_value=None) as mock_get_s_info, \
              patch('kickbot.kick_bot.get_chatroom_settings', return_value=None), \
              patch('kickbot.kick_bot.get_bot_settings', return_value=None):
             
-            # Manually set streamer_info as get_streamer_info is complex to mock here without its own tests
-            # and KickClient is also mocked. `run` method initializes the real `self.client`.
-            # The key is that `self.streamer_info['id']` is available when KEM is initialized in `run`.
-            bot.streamer_info = {"id": 98765, "username": "teststreamer"} # Mocked broadcaster ID
-            bot.chatroom_id = 112233 # Mocked chatroom ID for _join_chatroom
-            # bot.set_streamer(DEFAULT_BOT_SETTINGS["KickStreamer"]) # This would call actual helpers
+            bot.streamer_info = {"id": 98765, "username": "teststreamer"} 
+            bot.chatroom_id = 112233 
         
-        bot.MockKickClient = MockKickClient
-        bot.MockKickAuthManager = MockKickAuthManager
-        bot.MockKickEventManager = MockKickEventManager
-        bot.MockKickWebhookHandler = MockKickWebhookHandler
+        bot.MockKickClient = MockKickClient_fixture
+        bot.MockKickAuthManager = MockKickAuthManager_fixture
+        bot.MockKickEventManager = MockKickEventManager_fixture
+        bot.MockKickWebhookHandler = MockKickWebhookHandler_fixture
+        bot.MockTwitchWebsocket_class_for_test = MockTwitchWebsocket_fixture
         bot.mock_ws_connect = mock_ws_connect
         
         yield bot
@@ -139,13 +175,17 @@ async def kick_bot_instance(mock_settings_file, mock_env_vars):
         # This might be complex depending on what bot.run() starts.
 
 import json # for mock_settings_file
-import aiohttp # for KickClient session spec
 
 @pytest.mark.asyncio
 async def test_kickbot_run_subscribes_to_events(kick_bot_instance):
     '''Test KickBot.run subscribes to events if webhook is enabled.'''
     bot = kick_bot_instance
     bot.webhook_enabled = True # Ensure webhook is enabled for this test case
+    bot.enable_new_webhook_system = True # Ensure new system is enabled
+    # Ensure other settings-derived attributes used in run() before KEM init are present
+    bot.disable_legacy_gift_handling = DEFAULT_BOT_SETTINGS["FeatureFlags"]["DisableLegacyGiftEventHandling"]
+    bot.webhook_path = DEFAULT_BOT_SETTINGS["KickWebhookPath"]
+    bot.webhook_port = DEFAULT_BOT_SETTINGS["KickWebhookPort"]
     bot.kick_events_to_subscribe = DEFAULT_BOT_SETTINGS["KickEventsToSubscribe"]
     
     # Patch _start_webhook_server and _poll to prevent them from fully running
@@ -170,14 +210,14 @@ async def test_kickbot_run_no_subscribe_if_webhook_disabled(kick_bot_instance):
     '''Test KickBot.run does NOT subscribe if webhook is disabled.'''
     bot = kick_bot_instance
     bot.webhook_enabled = False # Disable webhook
-    bot.kick_events_to_subscribe = DEFAULT_BOT_SETTINGS["KickEventsToSubscribe"]
+    # No need to set kick_events_to_subscribe if we expect no subscription call
 
     with patch.object(bot, '_start_webhook_server', new_callable=AsyncMock) as mock_start_webhook, \
          patch.object(bot, '_poll', new_callable=AsyncMock) as mock_poll:
 
         await bot.run()
         
-        mock_start_webhook.assert_awaited_once() # Should still try to start/check webhook server status
+        mock_start_webhook.assert_not_awaited() # Changed from assert_awaited_once
         actual_kem_instance = bot.event_manager
         # Event manager might still be initialized if streamer_info is present,
         # but resubscribe should not be called.
@@ -206,26 +246,21 @@ async def test_kickbot_run_no_subscribe_if_no_events_configured(kick_bot_instanc
 async def test_kickbot_shutdown_unsubscribes_from_events(kick_bot_instance):
     '''Test KickBot.shutdown unsubscribes from events.'''
     bot = kick_bot_instance
-    # Simulate that EventManager was initialized and is active
-    # The instance mock_kem_instance is from the fixture's patch
-    bot.event_manager = bot.MockKickEventManager.return_value 
+    bot.event_manager = bot.MockKickEventManager.return_value
     
-    # Patch _stop_webhook_server and http_session.close to prevent side effects
     with patch.object(bot, '_stop_webhook_server', new_callable=AsyncMock) as mock_stop_webhook, \
-         patch.object(bot, 'http_session', MagicMock()) as mock_session_obj: # if http_session exists
-        if bot.http_session: # Ensure it exists before trying to patch close
+         patch.object(bot, 'http_session', MagicMock()) as mock_session_obj: 
+        if bot.http_session: 
             mock_session_obj.close = AsyncMock()
         
-        # Ensure ws_connection and ws (TwitchWebsocket for Markov) are handled
         bot.ws_connection = AsyncMock()
         bot.ws_connection.closed = False
-        bot.ws = AsyncMock()
+        bot.ws = bot.MockTwitchWebsocket_class_for_test()
         bot.ws.stop = MagicMock()
 
         await bot.shutdown()
         
-        # Assertions
-        assert bot.event_manager is None # Should be reset after clearing
+        assert bot.event_manager is None 
         bot.MockKickEventManager.return_value.clear_all_my_broadcaster_subscriptions.assert_awaited_once()
         mock_stop_webhook.assert_awaited_once()
         if bot.http_session:
@@ -248,3 +283,98 @@ async def test_kickbot_event_manager_not_init_if_no_streamer_id(kick_bot_instanc
         # Check that MockKickEventManager was not called to create an instance
         bot.MockKickEventManager.assert_not_called()
         mock_poll.assert_awaited_once() 
+
+# --- New tests for Feature Flags ---
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("feature_flag_settings", [
+    ({"KickWebhookEnabled": True, "FeatureFlags": {"EnableNewWebhookEventSystem": True, "DisableLegacyGiftEventHandling": False}}),
+    ({"KickWebhookEnabled": True, "FeatureFlags": {"EnableNewWebhookEventSystem": False, "DisableLegacyGiftEventHandling": False}}),
+    ({"KickWebhookEnabled": False, "FeatureFlags": {"EnableNewWebhookEventSystem": True, "DisableLegacyGiftEventHandling": False}}), # Webhook disabled globally
+])
+async def test_kickbot_run_respects_enable_new_webhook_system_flag(
+    feature_flag_settings, mock_env_vars, monkeypatch
+):
+    '''
+    Tests KickBot.run() behavior based on EnableNewWebhookEventSystem feature flag
+    and the global KickWebhookEnabled setting.
+    '''
+    current_test_settings = DEFAULT_BOT_SETTINGS.copy()
+    current_test_settings.update(feature_flag_settings)
+
+    # Mock builtins.open to return our specific settings for this test
+    mock_file = mock_open(read_data=json.dumps(current_test_settings))
+    
+    # Patch the global 'settings' variable in kickbot.kick_bot module as it's loaded at import time
+    # And also patch builtins.open for the initial load.
+    with patch('builtins.open', mock_file), \
+         patch('kickbot.kick_bot.settings', current_test_settings):
+
+        # Instantiate KickBot here so it picks up the patched global settings
+        # and the mocked open for its internal Settings() call if any.
+        bot = KickBot(username=current_test_settings["KickEmail"], password=current_test_settings["KickPass"])
+        bot.set_settings(current_test_settings)
+
+        # Apply mocks for dependencies initialized in KickBot or its methods
+        with patch('kickbot.kick_bot.KickClient', spec=KickClient) as MockKickClient, \
+             patch('kickbot.kick_bot.KickAuthManager', spec=KickAuthManager) as MockKickAuthManager, \
+             patch('kickbot.kick_bot.KickEventManager', spec=KickEventManager) as MockKickEventManager, \
+             patch('kickbot.kick_bot.KickWebhookHandler', spec=KickWebhookHandler) as MockKickWebhookHandler, \
+             patch('kickbot.kick_bot.get_ws_uri', return_value="ws://localhost:faker"), \
+             patch('kickbot.kick_bot.websockets.connect', new_callable=AsyncMock), \
+             patch('kickbot.kick_bot.Settings') as MockMarkovSettings, \
+             patch('kickbot.kick_bot.Database') as MockMarkovDatabase, \
+             patch('kickbot.kick_bot.TwitchWebsocket') as MockTwitchWebsocket, \
+             patch('kickbot.kick_bot.LoopingTimer'), \
+             patch.object(bot, '_start_webhook_server', new_callable=AsyncMock) as mock_bot_start_webhook_method, \
+             patch.object(bot, '_poll', new_callable=AsyncMock) as mock_poll:
+
+            # Setup mock instances
+            mock_kam_instance = AsyncMock(spec=KickAuthManager)
+            mock_kam_instance.get_valid_token = AsyncMock(return_value="test_bot_token")
+            MockKickAuthManager.return_value = mock_kam_instance
+
+            mock_kem_instance = AsyncMock(spec=KickEventManager)
+            MockKickEventManager.return_value = mock_kem_instance
+            
+            # Simulate parts of bot setup that happen before/during run()
+            bot.streamer_info = {"id": 98765, "username": current_test_settings["KickStreamer"]}
+            bot.chatroom_id = 112233 
+            # The bot's set_settings method will be called during __init__ due to Settings(self)
+            # which should load webhook_enabled and kick_events_to_subscribe from current_test_settings.
+            # If FeatureFlags are not picked up by set_settings, that's a bug to fix in KickBot.
+
+            await bot.run()
+
+            should_run_new_system = current_test_settings["FeatureFlags"]["EnableNewWebhookEventSystem"] and \
+                                  current_test_settings["KickWebhookEnabled"]
+
+            if should_run_new_system:
+                MockKickWebhookHandler.assert_called_once()
+                mock_bot_start_webhook_method.assert_awaited_once()
+                MockKickEventManager.assert_called_once_with(
+                    auth_manager=bot.auth_manager, 
+                    client=bot.client, # Expect KickClient instance
+                    broadcaster_user_id=bot.streamer_info['id']
+                )
+                mock_kem_instance.resubscribe_to_configured_events.assert_awaited_once_with(
+                     bot.kick_events_to_subscribe # This should be loaded by set_settings
+                )
+            else:
+                # If KickWebhookEnabled is false, KWH constructor is not called in run.
+                if not current_test_settings["KickWebhookEnabled"]:
+                    MockKickWebhookHandler.assert_not_called()
+                # else KWH might be constructed but not started
+                
+                mock_bot_start_webhook_method.assert_not_awaited()
+                
+                # KEM might be initialized if streamer_info is present but resubscribe shouldn't be called
+                # A stricter check: If the new system is disabled, KEM should ideally not be functional for subscriptions.
+                if bot.event_manager: # if KEM instance was created
+                    mock_kem_instance.resubscribe_to_configured_events.assert_not_awaited()
+                
+                # If the new system is entirely off, event_manager might not even be created.
+                # This depends on how the KickBot code will be structured.
+                # For now, we focus on resubscribe not being called.
+
+            mock_poll.assert_awaited_once() 

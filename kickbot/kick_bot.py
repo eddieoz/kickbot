@@ -50,7 +50,9 @@ class KickBot:
         self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        self.logger.addHandler(handler)
+        # Avoid adding handler if already present (e.g. during tests with multiple instances or re-init)
+        if not any(isinstance(h, logging.StreamHandler) for h in self.logger.handlers):
+            self.logger.addHandler(handler)
 
         # HTTP Session for all aiohttp requests - to be initialized in run()
         self.http_session: Optional[aiohttp.ClientSession] = None
@@ -93,36 +95,32 @@ class KickBot:
         # Markov Chain
         self.prev_message_t = 0
         self._enabled = True
-        self.link_regex = re.compile("\w+\.[a-z]{2,}")
+        self.link_regex = re.compile(r"\w+\.[a-z]{2,}")
         self.mod_list = []
-        self.set_blacklist()
+        self.set_blacklist() # This might be okay if blacklist.txt is static
 
         # Fill previously initialised variables with data from the settings.txt file
-        Settings(self)
-        self.db = Database(self.chan)
+        # Settings(self) # Commented out: settings are applied via set_settings method
+        # self.db = Database(self.chan) # Commented out: self.chan not set here; Markov DB init needs review
 
         # Set up daemon Timer to send help messages
-        if self.help_message_timer > 0:
-            if self.help_message_timer < 300:
-                raise ValueError("Value for \"HelpMessageTimer\" in must be at least 300 seconds, or a negative number for no help messages.")
-            t = LoopingTimer(self.help_message_timer, self.send_help_message)
-            t.start()
+        # if self.help_message_timer > 0: # Commented out: help_message_timer not set here
+        #     self.help_timer = LoopingTimer(self.help_message_timer, self.send_help_message)
+        #     self.help_timer.start()
         
         # Set up daemon Timer to send automatic generation messages
-        if self.automatic_generation_timer > 0:
-            if self.automatic_generation_timer < 30:
-                raise ValueError("Value for \"AutomaticGenerationMessage\" in must be at least 30 seconds, or a negative number for no automatic generations.")
-            t = LoopingTimer(self.automatic_generation_timer, self.send_automatic_generation_message)
-            t.start()
+        # if self.automatic_generation_timer > 0: # Commented out: automatic_generation_timer not set here
+        #     self.autogen_timer = LoopingTimer(self.automatic_generation_timer, self.generate_random_sentence_from_time)
+        #     self.autogen_timer.start()
 
-        self.ws = TwitchWebsocket(host=self.host, 
-                                  port=self.port,
-                                  chan=self.chan,
-                                  nick=self.nick,
-                                  auth=self.auth,
-                                  callback=MarkovChain.message_handler,
-                                  capability=["commands", "tags"],
-                                  live=True)
+        # self.ws = TwitchWebsocket(host=self.host, # Commented out: Depends on settings
+        #                           port=self.port,
+        #                           chan=self.chan,
+        #                           nick=self.nick,
+        #                           auth=self.auth,
+        #                           callback=MarkovChain.message_handler,
+        #                           capability=["commands", "tags"],
+        #                           live=True)
 
     def set_settings(self, settings: SettingsData):
         """Fill class instance attributes based on the settings file.
@@ -163,6 +161,31 @@ class KickBot:
         ]
         if len(self.kick_events_to_subscribe) != len(raw_events):
             self.logger.warning("Some configured Kick events to subscribe were invalid and have been filtered out.")
+
+        # Load Feature Flags
+        feature_flags_config = settings.get("FeatureFlags", {})
+        self.enable_new_webhook_system = feature_flags_config.get("EnableNewWebhookEventSystem", True) # Default to True
+        self.disable_legacy_gift_handling = feature_flags_config.get("DisableLegacyGiftEventHandling", False) # Default to False
+        if not isinstance(feature_flags_config, dict) or \
+           not isinstance(self.enable_new_webhook_system, bool) or \
+           not isinstance(self.disable_legacy_gift_handling, bool):
+            self.logger.warning(
+                "FeatureFlags configuration is invalid or missing expected boolean flags. Using defaults: "
+                f"EnableNewWebhookEventSystem={self.enable_new_webhook_system}, "
+                f"DisableLegacyGiftEventHandling={self.disable_legacy_gift_handling}"
+            )
+            # Ensure defaults are applied if structure was totally wrong
+            self.enable_new_webhook_system = True if not isinstance(self.enable_new_webhook_system, bool) else self.enable_new_webhook_system
+            self.disable_legacy_gift_handling = False if not isinstance(self.disable_legacy_gift_handling, bool) else self.disable_legacy_gift_handling
+
+        # Load event action configurations
+        self.handle_follow_event_actions = settings.get("HandleFollowEventActions", {"SendChatMessage": True}) # Default
+        if not isinstance(self.handle_follow_event_actions, dict) or \
+           not isinstance(self.handle_follow_event_actions.get("SendChatMessage"), bool):
+            self.logger.warning(
+                "HandleFollowEventActions configuration is invalid or missing SendChatMessage boolean. Using default: SendChatMessage=True"
+            )
+            self.handle_follow_event_actions = {"SendChatMessage": True}
 
     def send_help_message(self) -> None:
         """Send a Help message to the connected chat, as long as the bot wasn't disabled."""
@@ -248,77 +271,63 @@ class KickBot:
         # Initialize KickAuthManager
         # KickAuthManager loads its core OAuth parameters (client_id, client_secret, redirect_uri, scopes)
         # directly from environment variables (e.g., populated by a .env file).
-        # The constructor can take overrides if needed, or a custom token_file path.
-        try:
-            # The `KickAuthManager` provided does not take `client` in its actual __init__ signature shown.
-            # It manages its own aiohttp.ClientSession for its specific token requests.
-            # Allow overriding default token file via settings.json if desired.
-            token_file_override = settings.get("KICK_TOKEN_FILE_PATH", None) 
-            
-            # Scopes and redirect_uri can also be overridden from settings if desired,
-            # otherwise KAM uses .env values. For this example, we assume .env is primary for them.
-            # If you want settings.json to override .env for redirect_uri or scopes:
-            # kam_redirect_uri = settings.get("KICK_REDIRECT_URI_OVERRIDE", None)
-            # kam_scopes_list = settings.get("KICK_SCOPES_OVERRIDE", None)
-            # kam_scopes_str = " ".join(kam_scopes_list) if kam_scopes_list else None
-            # self.auth_manager = KickAuthManager(
-            #    redirect_uri=kam_redirect_uri,
-            #    scopes=kam_scopes_str,
-            #    token_file=token_file_override
-            # )
-            
-            self.auth_manager = KickAuthManager(token_file=token_file_override)
-            self.logger.info("KickAuthManager initialized (credentials and core config expected from .env).")
+        # No, it takes client and session as args, client_id etc are class attributes loaded from env by itself.
+        self.auth_manager = KickAuthManager(client=self.client, session=self.http_session)
+        self.logger.info("KickAuthManager initialized.")
 
-        except ValueError as e: # KickAuthManager raises ValueError if KICK_CLIENT_ID or KICK_REDIRECT_URI is missing from .env and not passed
-            self.logger.error(f"Failed to initialize KickAuthManager: {e}. Ensure KICK_CLIENT_ID and KICK_REDIRECT_URI are set in .env.")
-            await self.shutdown()
-            return
-        except Exception as e: # Catch any other unexpected init errors from KickAuthManager
-            self.logger.error(f"Unexpected error initializing KickAuthManager: {e}", exc_info=True)
-            await self.shutdown()
-            return
-        # self.logger.info("KickAuthManager initialized.") # Redundant due to log message in try block
-
-        # Perform initial token acquisition or validation
-        try:
-            initial_token = await self.auth_manager.get_valid_token()
-            if not initial_token:
-                self.logger.error("Failed to obtain initial valid token. Event subscriptions will likely fail. Manual OAuth grant may be required.")
-                # Depending on bot's design, either stop or continue with warnings.
-                # For User Story 3, we need this token.
-            else:
-                self.logger.info("Successfully obtained/validated initial access token.")
-        except Exception as e:
-            self.logger.error(f"Error during initial token validation: {e}. Event subscriptions may fail.", exc_info=True)
-            # Handle critical failure, perhaps shutdown if token is essential for all operations
-
-        # Start Webhook Server (needs to be up before subscribing to events)
-        await self._start_webhook_server()
-
-        # Initialize KickEventManager if streamer_info is available
-        # set_streamer is usually called before poll/run. If not, this needs adjustment.
-        # For now, let's assume set_streamer has been called and streamer_info is populated.
-        if self.streamer_info and self.streamer_info.get('id') and self.auth_manager and self.client:
-            self.event_manager = KickEventManager(
-                auth_manager=self.auth_manager,
-                client=self.client,
-                broadcaster_user_id=self.streamer_info['id']
+        # Initialize and start Webhook server if enabled by global and feature flag
+        if self.webhook_enabled and self.enable_new_webhook_system:
+            self.webhook_handler = KickWebhookHandler(
+                kick_bot_instance=self,  # Pass the KickBot instance
+                webhook_path=self.webhook_path,
+                port=self.webhook_port,
+                log_events=True, # Consider making this configurable
+                signature_verification=False, # TODO: Implement and make configurable
+                enable_new_webhook_system=self.enable_new_webhook_system,
+                disable_legacy_gift_handling=self.disable_legacy_gift_handling,
+                handle_follow_event_actions=self.handle_follow_event_actions # Pass the new config
             )
-            self.logger.info(f"KickEventManager initialized for broadcaster ID: {self.streamer_info['id']}.")
-            
-            # Subscribe to configured events
-            if self.webhook_enabled and self.kick_events_to_subscribe:
-                self.logger.info(f"Attempting to subscribe to configured Kick events: {self.kick_events_to_subscribe}")
-                await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
-            elif not self.webhook_enabled:
-                self.logger.info("Webhook server is not enabled, skipping Kick event subscriptions.")
-            else:
-                self.logger.info("No Kick events configured to subscribe to.")
+            self.logger.info(f"KickWebhookHandler initialized. Path: {self.webhook_path}, Port: {self.webhook_port}")
+            await self._start_webhook_server() # This will set up runner and site
+        elif self.webhook_enabled and not self.enable_new_webhook_system:
+            self.logger.info("KickWebhookEnabled is true in settings, but EnableNewWebhookEventSystem feature flag is false. Webhook server will not start.")
         else:
-            self.logger.warning("Streamer info not set or AuthManager/Client not ready. Cannot initialize KickEventManager or subscribe to events yet.")
-            # This implies set_streamer() must be called before run() can fully set up event subscriptions.
+            self.logger.info("KickWebhookEnabled is false in settings. Webhook server will not start.")
 
+
+        # Initialize Event Manager and subscribe to events if new system is enabled and streamer info is available
+        if self.enable_new_webhook_system and self.webhook_enabled: # Also depends on webhook being enabled
+            if self.streamer_info and 'id' in self.streamer_info:
+                broadcaster_id_val = self.streamer_info['id']
+                self.event_manager = KickEventManager(
+                    auth_manager=self.auth_manager, 
+                    client=self.client, # Pass the KickClient instance
+                    broadcaster_user_id=broadcaster_id_val 
+                )
+                self.logger.info(f"KickEventManager initialized for broadcaster ID: {broadcaster_id_val}.")
+                # Resubscribe to events
+                if self.kick_events_to_subscribe:
+                    self.logger.info(f"Attempting to subscribe to {len(self.kick_events_to_subscribe)} Kick event(s).")
+                    try:
+                        success = await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
+                        if success:
+                            self.logger.info("Successfully (re)subscribed to configured Kick events.")
+                        else:
+                            self.logger.warning("Failed to (re)subscribe to some or all configured Kick events.")
+                    except Exception as e:
+                        self.logger.error(f"Error during event resubscription: {e}", exc_info=True)
+                else:
+                    self.logger.info("No Kick events configured to subscribe to.")
+            else:
+                self.logger.warning("Streamer info (especially ID) not available. Cannot initialize KickEventManager or subscribe to events.")
+        else:
+            if not self.enable_new_webhook_system:
+                self.logger.info("EnableNewWebhookEventSystem feature flag is false. KickEventManager will not be initialized, and events will not be subscribed.")
+            elif not self.webhook_enabled:
+                 self.logger.info("KickWebhookEnabled is false. KickEventManager will not be initialized, and events will not be subscribed.")
+
+
+        # Start polling for chat messages (traditional method)
         await self._poll()
 
     async def shutdown(self):
@@ -339,7 +348,7 @@ class KickBot:
             except Exception as e:
                 self.logger.error(f"Error closing WebSocket connection: {e}", exc_info=True)
         
-        if hasattr(self, 'ws') and isinstance(self.ws, TwitchWebsocket):
+        if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'stop') and callable(self.ws.stop):
             try:
                 self.ws.stop()
                 self.logger.info("MarkovChain TwitchWebsocket stopped.")
@@ -550,15 +559,23 @@ class KickBot:
 
     async def _start_webhook_server(self):
         if not self.webhook_enabled:
-            self.logger.info("Webhook server is disabled in settings.")
+            self.logger.info("Kick Webhook event system is disabled in settings.")
             return
 
-        if self.webhook_handler is None:
-            self.webhook_handler = KickWebhookHandler(
-                webhook_path=self.webhook_path,
-                port=self.webhook_port,
-                log_events=True
-            )
+        if not self.http_session:
+            self.logger.error("HTTP session is not initialized. Cannot start webhook server.")
+            return
+
+        self.webhook_handler = KickWebhookHandler(
+            kick_bot_instance=self,  # Pass the KickBot instance
+            webhook_path=self.webhook_path,
+            port=self.webhook_port,
+            log_events=True, # Consider making this configurable
+            signature_verification=False, # TODO: Implement and make configurable
+            enable_new_webhook_system=self.enable_new_webhook_system,
+            disable_legacy_gift_handling=self.disable_legacy_gift_handling,
+            handle_follow_event_actions=self.handle_follow_event_actions # Pass the new config
+        )
 
         app = web.Application()
         app.router.add_post(self.webhook_handler.webhook_path, self.webhook_handler.handle_webhook)

@@ -98,6 +98,89 @@ To add support for a new Kick event type not yet covered:
 
 This will enable the `KickWebhookHandler` to parse the new event type using your defined models and dispatch it to your custom handler method.
 
+### Configuring Specific Event Actions
+
+Beyond just parsing and logging, Sr_Botoshi allows for specific actions to be configured for certain events. These configurations are typically found in your `settings.json` file and are used in conjunction with the main `EnableNewWebhookEventSystem` feature flag.
+
+**Example: Follow Event Actions**
+
+When a `channel.followed` event is received, you can configure Sr_Botoshi to automatically send a "thank you" message in the chat.
+
+This is controlled by the `HandleFollowEventActions` object in `settings.json`:
+
+```json
+{
+  // ... other settings ...
+  "FeatureFlags": {
+    "EnableNewWebhookEventSystem": true,
+    // ... other flags ...
+  },
+  "HandleFollowEventActions": {
+    "SendChatMessage": true
+  }
+  // ... other settings ...
+}
+```
+
+-   **`HandleFollowEventActions`**: This object contains settings specific to actions for follow events.
+    -   **`SendChatMessage`** (boolean): 
+        -   If `true`, and `FeatureFlags.EnableNewWebhookEventSystem` is also `true`, the bot will attempt to send a chat message like "Thanks for following, {username}!" when a new follow event is processed.
+        -   If `false`, no chat message will be sent for new follows, even if the new webhook system is enabled.
+        -   If this setting or the `HandleFollowEventActions` object is entirely missing from `settings.json`, `SendChatMessage` defaults to `true` (meaning the bot will try to send the message if the new webhook system is on).
+
+To disable the follow thank you message, you would set `SendChatMessage` to `false`:
+```json
+  "HandleFollowEventActions": {
+    "SendChatMessage": false
+  }
+```
+
+**Example: New Subscription Event Actions**
+
+When a `channel.subscription.new` event (a new, non-gifted subscription) is received, you can configure Sr_Botoshi to perform specific actions like sending a thank you message and (in the future) awarding points.
+
+This is controlled by the `HandleSubscriptionEventActions` object in `settings.json`:
+
+```json
+{
+  // ... other settings ...
+  "FeatureFlags": {
+    "EnableNewWebhookEventSystem": true,
+    // ... other flags ...
+  },
+  "HandleSubscriptionEventActions": {
+    "SendChatMessage": true,
+    "AwardPoints": true,
+    "PointsToAward": 100
+  }
+  // ... other settings ...
+}
+```
+
+-   **`HandleSubscriptionEventActions`**: This object contains settings specific to actions for new, non-gifted subscription events.
+    -   **`SendChatMessage`** (boolean):
+        -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will attempt to send a chat message like "Welcome to the sub club, {username}! Thanks for subscribing." when a new subscription event is processed.
+        -   If `false`, no chat message will be sent for new subscriptions.
+        -   Defaults to `true` if the key is missing or the `HandleSubscriptionEventActions` object is not present.
+    -   **`AwardPoints`** (boolean):
+        -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will attempt to award points to the subscriber. (Currently, this logs a placeholder message; actual point awarding is a future implementation.)
+        -   If `false`, no points will be awarded (or logged for awarding).
+        -   Defaults to `true` if the key is missing.
+    -   **`PointsToAward`** (integer):
+        -   Specifies the number of points to award if `AwardPoints` is `true`.
+        -   Defaults to `100` if the key is missing.
+
+To disable chat messages for new subscriptions but keep point awarding (once fully implemented):
+```json
+  "HandleSubscriptionEventActions": {
+    "SendChatMessage": false,
+    "AwardPoints": true,
+    "PointsToAward": 150
+  }
+```
+
+As more event-specific actions are added (e.g., for subscriptions, gifts), their configurations will be documented here and will typically reside in `settings.json` under similar dedicated objects.
+
 ## Signature Verification
 
 For enhanced security, Sr_Botoshi supports verifying the signatures of incoming webhooks. This ensures that the webhooks are genuinely from Kick.com and haven't been tampered with.

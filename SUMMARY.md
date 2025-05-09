@@ -36,9 +36,10 @@
 - Updated `kickbot/kick_webhook_handler.py`:
   - To parse incoming JSON webhook payloads into the new Pydantic models.
   - To dispatch these typed event objects to specific handler methods (e.g., `handle_follow_event(self, event: FollowEvent)`).
+  - Implemented initial actions (e.g., sending chat messages for follow and new subscription events) within these handlers, controlled by new configuration settings in `settings.json` (e.g., `HandleFollowEventActions`, `HandleSubscriptionEventActions`).
 - Implemented enhanced logging within these new typed event handlers.
-- Developed comprehensive unit tests in `tests/test_kick_webhook_handler.py` covering event parsing, dispatch logic, and error handling, all of which are passing.
-- Updated `docs/webhooks_and_signature_verification.md` to detail the new Pydantic-based event handling, supported events, and instructions for adding new event handlers.
+- Developed comprehensive unit tests in `tests/test_kick_webhook_handler.py` covering event parsing, dispatch logic, action execution based on configuration, and error handling, all of which are passing.
+- Updated `docs/webhooks_and_signature_verification.md` to detail the new Pydantic-based event handling, supported events, instructions for adding new event handlers, and documentation for the new event action configurations.
 
 ## What's Next
 
@@ -50,7 +51,7 @@
 2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
 
 ### Longer Term
-- Implement actual bot actions (beyond logging) in the new Pydantic-based event handlers, controlled by feature flags.
+- Implement actual bot actions (beyond logging) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow and new subscription events are now implemented with configurable flags. Further actions, like points integration, and actions for other events like gifted subscriptions are still to come.)
 - Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
 
 ## Technical Improvements
