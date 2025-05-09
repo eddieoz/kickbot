@@ -187,6 +187,66 @@ class KickBot:
             )
             self.handle_follow_event_actions = {"SendChatMessage": True}
 
+        self.handle_subscription_event_actions = settings.get("HandleSubscriptionEventActions", { # Defaults
+            "SendChatMessage": True, 
+            "AwardPoints": True, 
+            "PointsToAward": 100
+        })
+        if not isinstance(self.handle_subscription_event_actions, dict) or \
+           not isinstance(self.handle_subscription_event_actions.get("SendChatMessage"), bool) or \
+           not isinstance(self.handle_subscription_event_actions.get("AwardPoints"), bool) or \
+           not isinstance(self.handle_subscription_event_actions.get("PointsToAward"), int):
+            self.logger.warning(
+                "HandleSubscriptionEventActions configuration is invalid or missing expected keys/types. Using defaults."
+            )
+            self.handle_subscription_event_actions = {
+                "SendChatMessage": True, 
+                "AwardPoints": True, 
+                "PointsToAward": 100
+            }
+
+        self.handle_gifted_subscription_event_actions = settings.get("HandleGiftedSubscriptionEventActions", { # Defaults
+            "SendThankYouChatMessage": True,
+            "AwardPointsToGifter": True,
+            "PointsToGifterPerSub": 50,
+            "AwardPointsToRecipients": True,
+            "PointsToRecipient": 25
+        })
+        if not isinstance(self.handle_gifted_subscription_event_actions, dict) or \
+           not isinstance(self.handle_gifted_subscription_event_actions.get("SendThankYouChatMessage"), bool) or \
+           not isinstance(self.handle_gifted_subscription_event_actions.get("AwardPointsToGifter"), bool) or \
+           not isinstance(self.handle_gifted_subscription_event_actions.get("PointsToGifterPerSub"), int) or \
+           not isinstance(self.handle_gifted_subscription_event_actions.get("AwardPointsToRecipients"), bool) or \
+           not isinstance(self.handle_gifted_subscription_event_actions.get("PointsToRecipient"), int):
+            self.logger.warning(
+                "HandleGiftedSubscriptionEventActions configuration is invalid or missing expected keys/types. Using defaults."
+            )
+            self.handle_gifted_subscription_event_actions = {
+                "SendThankYouChatMessage": True,
+                "AwardPointsToGifter": True,
+                "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True,
+                "PointsToRecipient": 25
+            }
+
+        self.handle_subscription_renewal_event_actions = settings.get("HandleSubscriptionRenewalEventActions", { # Defaults
+            "SendChatMessage": True,
+            "AwardPoints": True,
+            "PointsToAward": 100 # Default points for renewal
+        })
+        if not isinstance(self.handle_subscription_renewal_event_actions, dict) or \
+           not isinstance(self.handle_subscription_renewal_event_actions.get("SendChatMessage"), bool) or \
+           not isinstance(self.handle_subscription_renewal_event_actions.get("AwardPoints"), bool) or \
+           not isinstance(self.handle_subscription_renewal_event_actions.get("PointsToAward"), int):
+            self.logger.warning(
+                "HandleSubscriptionRenewalEventActions configuration is invalid or missing expected keys/types. Using defaults."
+            )
+            self.handle_subscription_renewal_event_actions = {
+                "SendChatMessage": True,
+                "AwardPoints": True,
+                "PointsToAward": 100
+            }
+
     def send_help_message(self) -> None:
         """Send a Help message to the connected chat, as long as the bot wasn't disabled."""
         if self._enabled:
@@ -285,7 +345,10 @@ class KickBot:
                 signature_verification=False, # TODO: Implement and make configurable
                 enable_new_webhook_system=self.enable_new_webhook_system,
                 disable_legacy_gift_handling=self.disable_legacy_gift_handling,
-                handle_follow_event_actions=self.handle_follow_event_actions # Pass the new config
+                handle_follow_event_actions=self.handle_follow_event_actions, # Pass the new config
+                handle_subscription_event_actions=self.handle_subscription_event_actions,
+                handle_gifted_subscription_event_actions=self.handle_gifted_subscription_event_actions,
+                handle_subscription_renewal_event_actions=self.handle_subscription_renewal_event_actions # Pass renewal config
             )
             self.logger.info(f"KickWebhookHandler initialized. Path: {self.webhook_path}, Port: {self.webhook_port}")
             await self._start_webhook_server() # This will set up runner and site
@@ -574,7 +637,10 @@ class KickBot:
             signature_verification=False, # TODO: Implement and make configurable
             enable_new_webhook_system=self.enable_new_webhook_system,
             disable_legacy_gift_handling=self.disable_legacy_gift_handling,
-            handle_follow_event_actions=self.handle_follow_event_actions # Pass the new config
+            handle_follow_event_actions=self.handle_follow_event_actions, # Pass the new config
+            handle_subscription_event_actions=self.handle_subscription_event_actions,
+            handle_gifted_subscription_event_actions=self.handle_gifted_subscription_event_actions,
+            handle_subscription_renewal_event_actions=self.handle_subscription_renewal_event_actions # Pass renewal config
         )
 
         app = web.Application()

@@ -179,7 +179,87 @@ To disable chat messages for new subscriptions but keep point awarding (once ful
   }
 ```
 
-As more event-specific actions are added (e.g., for subscriptions, gifts), their configurations will be documented here and will typically reside in `settings.json` under similar dedicated objects.
+**Example: Gifted Subscription Event Actions**
+
+When a `channel.subscription.gifts` event (gifted subscriptions) is received, Sr_Botoshi can perform several actions:
+
+- Send a thank you message in chat.
+- Award points to the gifter.
+- Award points to the recipients.
+
+These actions are controlled by the `HandleGiftedSubscriptionEventActions` object in `settings.json`:
+
+```json
+{
+  // ... other settings ...
+  "FeatureFlags": {
+    "EnableNewWebhookEventSystem": true,
+    "DisableLegacyGiftEventHandling": false // If true, any old gift processing is skipped
+  },
+  "HandleGiftedSubscriptionEventActions": {
+    "SendThankYouChatMessage": true,
+    "AwardPointsToGifter": true,
+    "PointsToGifterPerSub": 50,
+    "AwardPointsToRecipients": true,
+    "PointsToRecipient": 25
+  }
+  // ... other settings ...
+}
+```
+
+-   **`HandleGiftedSubscriptionEventActions`**: This object contains settings specific to actions for gifted subscription events.
+    -   **`SendThankYouChatMessage`** (boolean):
+        -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will send a chat message thanking the gifter and acknowledging the recipients.
+        -   Defaults to `true`.
+    -   **`AwardPointsToGifter`** (boolean):
+        -   If `true` (and system enabled, and gifter is not Anonymous), the bot will award points to the gifter.
+        -   Defaults to `true`.
+    -   **`PointsToGifterPerSub`** (integer):
+        -   The number of points awarded to the gifter *for each sub gifted* if `AwardPointsToGifter` is `true`.
+        -   Defaults to `50`.
+    -   **`AwardPointsToRecipients`** (boolean):
+        -   If `true` (and system enabled), the bot will award points to each recipient of a gifted sub.
+        -   Defaults to `true`.
+    -   **`PointsToRecipient`** (integer):
+        -   The number of points awarded to each recipient if `AwardPointsToRecipients` is `true`.
+        -   Defaults to `25`.
+
+*(Note: Point awarding is currently implemented as logging placeholders; actual database interaction for points is a future enhancement.)*
+
+**Example: Subscription Renewal Event Actions**
+
+When a `channel.subscription.renewal` event is received, Sr_Botoshi can perform actions like sending a congratulatory message and awarding points for continued support.
+
+This is controlled by the `HandleSubscriptionRenewalEventActions` object in `settings.json`:
+
+```json
+{
+  // ... other settings ...
+  "FeatureFlags": {
+    "EnableNewWebhookEventSystem": true,
+    // ... other flags ...
+  },
+  "HandleSubscriptionRenewalEventActions": {
+    "SendChatMessage": true,
+    "AwardPoints": true,
+    "PointsToAward": 120
+  }
+  // ... other settings ...
+}
+```
+
+-   **`HandleSubscriptionRenewalEventActions`**: This object contains settings specific to actions for subscription renewal events.
+    -   **`SendChatMessage`** (boolean):
+        -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will send a chat message like "Thanks {username} for renewing your Tier {tier} sub for {months_subscribed} months!".
+        -   Defaults to `true`.
+    -   **`AwardPoints`** (boolean):
+        -   If `true` (and system enabled), the bot will (currently log) awarding points to the renewing subscriber.
+        -   Defaults to `true`.
+    -   **`PointsToAward`** (integer):
+        -   The number of points to award if `AwardPoints` is `true`.
+        -   Defaults to `100` (example value 120 used in snippet above for illustration, actual default in code is 100, and an example in `settings.json` uses 120).
+
+As more event-specific actions are added, their configurations will be documented here and will typically reside in `settings.json` under similar dedicated objects.
 
 ## Signature Verification
 

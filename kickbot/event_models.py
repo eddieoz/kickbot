@@ -71,8 +71,23 @@ class GiftedSubscriptionEventData(BaseModel):
     gifter: Optional[GifterInfo] = None # Gifter can be anonymous, so GifterInfo itself is optional or its fields are
     giftees: List[RecipientInfo] = Field(..., alias="recipients") # Map from our old 'recipients' or expect 'giftees' from payload
     subscription_tier: Optional[str] = Field(None, alias="tier") # Not in basic .gifts payload, make optional
-    created_at: datetime.datetime = Field(..., alias="gifted_at") # Keep alias for now if old payloads might still come via testing
+    created_at: datetime.datetime # Field name from Kick docs for gift event is 'created_at'
     expires_at: Optional[datetime.datetime] = None # From payload
+
+class SubscriptionRenewalEventData(BaseModel):
+    """Data specific to a 'channel.subscription.renewal' event."""
+    subscriber: SubscriberInfo
+    subscription_tier: Optional[str] = Field(None, alias="tier") 
+    months_subscribed: int = Field(..., alias="duration") # Cumulative months
+    created_at: datetime.datetime # Start of current period
+    expires_at: Optional[datetime.datetime] = None # End of current period
+
+    @field_validator('months_subscribed', mode='before')
+    @classmethod
+    def convert_duration_to_months(cls, v):
+        if isinstance(v, int):
+            return v
+        raise ValueError("Invalid value for duration/months_subscribed")
 
 class GiftedSubscriptionEvent(BaseModel):
     """Data specific to a 'channel.subscription.gifts' event."""
@@ -81,6 +96,10 @@ class GiftedSubscriptionEvent(BaseModel):
     channel_id: str
     created_at: datetime.datetime # Top-level created_at for the event wrapper itself
     data: GiftedSubscriptionEventData
+
+class SubscriptionRenewalEvent(BaseModel):
+    event: Literal["channel.subscription.renewal"]
+    data: SubscriptionRenewalEventData
 
 # Common structure for the entire webhook payload from Kick
 # Assuming Kick's payload has 'event' for type, 'data' for specifics,
@@ -108,13 +127,18 @@ class GiftedSubscriptionEvent(KickEventBase):
     event: Literal["channel.subscription.gifts"]
     data: GiftedSubscriptionEventData
 
+class SubscriptionRenewalEvent(KickEventBase):
+    event: Literal["channel.subscription.renewal"]
+    data: SubscriptionRenewalEventData
+
 # Using RootModel for discriminated union if Pydantic v2
 # For Pydantic v1, a Union type hint and parse_obj_as is more typical.
 # Let's define a Union type that can be used with parse_obj_as.
 AnyKickEvent = Union[
     FollowEvent,
     SubscriptionEventKick, # Use the KickEventBase derived version in the Union
-    GiftedSubscriptionEvent
+    GiftedSubscriptionEvent,
+    SubscriptionRenewalEvent
 ]
 
 # Helper to parse any incoming payload
@@ -124,6 +148,7 @@ _event_model_map = {
     "channel.followed": FollowEvent,
     "channel.subscription.new": SubscriptionEventKick, # Map to the KickEventBase derived version
     "channel.subscription.gifts": GiftedSubscriptionEvent,
+    "channel.subscription.renewal": SubscriptionRenewalEvent,
 }
 
 def parse_kick_event_payload(payload: dict) -> Optional[AnyKickEvent]:

@@ -36,10 +36,10 @@
 - Updated `kickbot/kick_webhook_handler.py`:
   - To parse incoming JSON webhook payloads into the new Pydantic models.
   - To dispatch these typed event objects to specific handler methods (e.g., `handle_follow_event(self, event: FollowEvent)`).
-  - Implemented initial actions (e.g., sending chat messages for follow and new subscription events) within these handlers, controlled by new configuration settings in `settings.json` (e.g., `HandleFollowEventActions`, `HandleSubscriptionEventActions`).
+  - Implemented initial actions (e.g., sending chat messages and logging point awards for follow, new subscription, and gifted subscription events) within these handlers, controlled by new configuration settings in `settings.json` (e.g., `HandleFollowEventActions`, `HandleSubscriptionEventActions`, `HandleGiftedSubscriptionEventActions`).
 - Implemented enhanced logging within these new typed event handlers.
-- Developed comprehensive unit tests in `tests/test_kick_webhook_handler.py` covering event parsing, dispatch logic, action execution based on configuration, and error handling, all of which are passing.
-- Updated `docs/webhooks_and_signature_verification.md` to detail the new Pydantic-based event handling, supported events, instructions for adding new event handlers, and documentation for the new event action configurations.
+- Developed comprehensive unit tests in `tests/test_kick_webhook_handler.py` covering event parsing, dispatch logic, action execution based on configuration (including for gifted subs), and error handling.
+- Updated `docs/webhooks_and_signature_verification.md` to detail the new Pydantic-based event handling, supported events, instructions for adding new event handlers, and documentation for event action configurations including for gifted subscriptions.
 
 ## What's Next
 
@@ -51,7 +51,7 @@
 2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
 
 ### Longer Term
-- Implement actual bot actions (beyond logging) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow and new subscription events are now implemented with configurable flags. Further actions, like points integration, and actions for other events like gifted subscriptions are still to come.)
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
 - Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
 
 ## Technical Improvements
@@ -101,3 +101,5444 @@ python scripts/test_webhook.py
 ```
 
 This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers, controlled by feature flags. (Note: Initial actions for follow, new subscription, and gifted subscription events, including chat messages and point logging, are now implemented with configurable flags. Full points system integration is a key next step for these actions.)
+- Once the new webhook system is validated for all targeted events, plan and execute the decommissioning of the old WebSocket/chat-scraping logic for those events.
+
+## Technical Improvements
+
+- Fixed test suite to ensure all tests run cleanly individually and together
+- Created a custom test runner script to run tests in isolation
+- Added shell script for easy test execution
+- Updated documentation with test instructions
+
+## Running the Tests
+
+To run the token management tests (including storage and refresh):
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+# Assuming tests are run via a script like tests/run_tests.py or directly:
+python -m unittest tests.test_kick_auth_simple.py
+```
+
+To run the webhook handler tests:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python -m unittest tests.test_kick_webhook_handler
+```
+
+## Testing the OAuth Flow
+
+To test the OAuth flow with token storage and refresh:
+```bash
+conda activate kickbot
+export PYTHONPATH=$(pwd):$PYTHONPATH
+python scripts/kick_auth_example.py --authorize
+```
+
+This will start an authorization flow that saves tokens to a file. After authorization, you can test API requests:
+```bash
+python scripts/kick_auth_example.py --test-api
+```
+
+## Testing the Webhook Handler
+
+To test the webhook handler with ngrok:
+```bash
+pip install pyngrok  # if not already installed
+python scripts/test_webhook.py
+```
+
+This will start a local server and expose it via ngrok, providing a public URL that can be registered with Kick for webhook events. 
+
+## What's Next
+
+### Immediate Next Steps
+1.  Begin User Story 5 (Parallel Operation and Phased Rollout), focusing on:
+    *   Introducing feature flags in the configuration to control whether the new webhook-based event system's actions are enabled or if the old system's specific event parsing (e.g., for gifts via chat) is disabled.
+    *   Reviewing actions taken by current webhook event handlers (currently logging) and planning how to integrate actions like sending chat messages or updating bot state, guarded by these feature flags.
+    *   Conducting testing with both systems potentially active to ensure smooth transition.
+2.  Address payload signature verification for webhooks (User Story 2 task) if/when Kick provides clear documentation.
+
+### Longer Term
+- Implement actual bot actions (beyond logging and chat messages) in the new Pydantic-based event handlers,

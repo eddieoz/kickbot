@@ -8,7 +8,7 @@ from aiohttp import web
 from pydantic import ValidationError
 
 from kickbot.kick_webhook_handler import KickWebhookHandler
-from kickbot.event_models import FollowEvent, SubscriptionEvent, GiftedSubscriptionEvent, AnyKickEvent, parse_kick_event_payload, UserInfo, FollowEventData, SubscriberInfo, SubscriptionEventData, GifterInfo, RecipientInfo, GiftedSubscriptionEventData, FollowerInfo, SubscriptionEventKick
+from kickbot.event_models import FollowEvent, SubscriptionEvent, GiftedSubscriptionEvent, AnyKickEvent, parse_kick_event_payload, UserInfo, FollowEventData, SubscriberInfo, SubscriptionEventData, GifterInfo, RecipientInfo, GiftedSubscriptionEventData, FollowerInfo, SubscriptionEventKick, SubscriptionRenewalEvent
 
 # Predefined valid UTC datetime object for consistent testing
 VALID_TIMESTAMP_STR = "2024-03-10T10:00:00Z"
@@ -60,6 +60,20 @@ VALID_GIFTED_SUB_PAYLOAD = {
     }
 }
 
+VALID_RENEWAL_PAYLOAD = {
+    "id": "evt_renewal_abc",
+    "event": "channel.subscription.renewal",
+    "channel_id": "channel_xyz",
+    "created_at": VALID_DATETIME_PAYLOAD_FORMAT, # Event creation time
+    "data": {
+        "subscriber": {"id": "user_renewer_xyz", "username": "LoyalRenewer"},
+        "subscription_tier": "Tier 2", # Field included as per our model
+        "duration": 12, # Cumulative months
+        "created_at": VALID_DATETIME_PAYLOAD_FORMAT, # Subscription period start
+        "expires_at": "2025-03-10T10:00:00Z"  # Subscription period end
+    }
+}
+
 INVALID_JSON_PAYLOAD_STR = "{\"event\": \"not_json\""
 MALFORMED_EVENT_PAYLOAD = {"id": "malformed_evt_000"} # Missing 'event' type and 'data'
 UNKNOWN_EVENT_PAYLOAD = {
@@ -90,12 +104,14 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.real_handle_follow_event = self.handler.handle_follow_event
         self.real_handle_subscription_event = self.handler.handle_subscription_event
         self.real_handle_gifted_subscription_event = self.handler.handle_gifted_subscription_event
+        self.real_handle_subscription_renewal_event = self.handler.handle_subscription_renewal_event # Added for renewal
 
         # For tests checking dispatch logic, we still mock the handlers to verify they are called.
         # These will be set on a new handler instance if a test needs this behavior.
         self.mock_follow_handler = AsyncMock(name="mock_follow_event_handler")
         self.mock_subscription_handler = AsyncMock(name="mock_subscription_event_handler")
         self.mock_gifted_subscription_handler = AsyncMock(name="mock_gifted_subscription_event_handler")
+        self.mock_renewal_handler = AsyncMock(name="mock_subscription_renewal_event_handler") # Added for renewal
 
     async def simulate_request(self, payload_data, handler_instance=None):
         """Helper to simulate an aiohttp request."""
@@ -142,6 +158,15 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(parsed.data.giftees), 2)
         self.assertEqual(parsed.data.giftees[0].username, "TestRecipient1")
 
+    def test_parse_valid_renewal_event(self):
+        parsed = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        self.assertIsInstance(parsed, SubscriptionRenewalEvent)
+        self.assertEqual(parsed.id, VALID_RENEWAL_PAYLOAD["id"])
+        self.assertEqual(parsed.event, "channel.subscription.renewal")
+        self.assertEqual(parsed.data.subscriber.username, "LoyalRenewer")
+        self.assertEqual(parsed.data.months_subscribed, 12)
+        self.assertEqual(parsed.data.subscription_tier, "Tier 2")
+
     def test_parse_malformed_payload_returns_none(self):
         # Test with missing critical fields for Pydantic model validation
         parsed = parse_kick_event_payload(MALFORMED_EVENT_PAYLOAD)
@@ -159,6 +184,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         handler_with_mocks.register_event_handler("channel.followed", self.mock_follow_handler)
         handler_with_mocks.register_event_handler("channel.subscription.new", self.mock_subscription_handler)
         handler_with_mocks.register_event_handler("channel.subscription.gifts", self.mock_gifted_subscription_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.renewal", self.mock_renewal_handler) # Added for renewal
 
         response = await self.simulate_request(VALID_FOLLOW_PAYLOAD, handler_instance=handler_with_mocks)
         self.assertEqual(response.status, 200)
@@ -169,6 +195,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_args.data.follower.username, "TestFollower")
         self.mock_subscription_handler.assert_not_called()
         self.mock_gifted_subscription_handler.assert_not_called()
+        self.mock_renewal_handler.assert_not_called() # Added for renewal
 
     async def test_handle_webhook_valid_subscribe_event_dispatches(self):
         handler_with_mocks = KickWebhookHandler(
@@ -180,6 +207,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         handler_with_mocks.register_event_handler("channel.followed", self.mock_follow_handler)
         handler_with_mocks.register_event_handler("channel.subscription.new", self.mock_subscription_handler)
         handler_with_mocks.register_event_handler("channel.subscription.gifts", self.mock_gifted_subscription_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.renewal", self.mock_renewal_handler) # Added for renewal
 
         response = await self.simulate_request(VALID_SUBSCRIBE_PAYLOAD, handler_instance=handler_with_mocks)
         self.assertEqual(response.status, 200)
@@ -189,6 +217,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_args.data.subscriber.username, "TestSubscriber")
         self.mock_follow_handler.assert_not_called()
         self.mock_gifted_subscription_handler.assert_not_called()
+        self.mock_renewal_handler.assert_not_called() # Added for renewal
 
     async def test_handle_webhook_valid_gifted_sub_event_dispatches(self):
         handler_with_mocks = KickWebhookHandler(
@@ -200,6 +229,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         handler_with_mocks.register_event_handler("channel.followed", self.mock_follow_handler)
         handler_with_mocks.register_event_handler("channel.subscription.new", self.mock_subscription_handler)
         handler_with_mocks.register_event_handler("channel.subscription.gifts", self.mock_gifted_subscription_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.renewal", self.mock_renewal_handler) # Added for renewal
 
         response = await self.simulate_request(VALID_GIFTED_SUB_PAYLOAD, handler_instance=handler_with_mocks)
         self.assertEqual(response.status, 200)
@@ -209,6 +239,30 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(call_args.data.gifter.username, "TestGifter")
         self.mock_follow_handler.assert_not_called()
         self.mock_subscription_handler.assert_not_called()
+        self.mock_renewal_handler.assert_not_called() # Added for renewal
+
+    async def test_handle_webhook_valid_renewal_event_dispatches(self):
+        handler_with_mocks = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot, 
+            log_events=False,
+            enable_new_webhook_system=True,
+            disable_legacy_gift_handling=False
+            # Not passing renewal_actions here, so defaults will be used by the handler if called
+        )
+        handler_with_mocks.register_event_handler("channel.followed", self.mock_follow_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.new", self.mock_subscription_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.gifts", self.mock_gifted_subscription_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.renewal", self.mock_renewal_handler)
+
+        response = await self.simulate_request(VALID_RENEWAL_PAYLOAD, handler_instance=handler_with_mocks)
+        self.assertEqual(response.status, 200)
+        self.mock_renewal_handler.assert_called_once()
+        call_args = self.mock_renewal_handler.call_args[0][0]
+        self.assertIsInstance(call_args, SubscriptionRenewalEvent)
+        self.assertEqual(call_args.data.subscriber.username, "LoyalRenewer")
+        self.mock_follow_handler.assert_not_called()
+        self.mock_subscription_handler.assert_not_called()
+        self.mock_gifted_subscription_handler.assert_not_called()
 
     async def test_handle_webhook_invalid_json_string(self):
         with self.assertLogs(logger='kickbot.kick_webhook_handler', level='ERROR') as cm:
@@ -216,6 +270,10 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertIn("Failed to parse webhook JSON payload", cm.output[0])
         # self.handler.handle_follow_event.assert_not_called() # This would refer to the mock if setUp was not changed
+        self.mock_follow_handler.assert_not_called()
+        self.mock_subscription_handler.assert_not_called()
+        self.mock_gifted_subscription_handler.assert_not_called()
+        self.mock_renewal_handler.assert_not_called() # Added for renewal
 
     async def test_handle_webhook_malformed_pydantic_payload(self):
         # This payload is valid JSON but will fail Pydantic validation in parse_kick_event_payload
@@ -238,6 +296,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         handler_with_mocks.register_event_handler("channel.followed", self.mock_follow_handler)
         handler_with_mocks.register_event_handler("channel.subscription.new", self.mock_subscription_handler)
         handler_with_mocks.register_event_handler("channel.subscription.gifts", self.mock_gifted_subscription_handler)
+        handler_with_mocks.register_event_handler("channel.subscription.renewal", self.mock_renewal_handler)
 
         with self.assertLogs(logger='kickbot.kick_webhook_handler', level='WARNING') as cm:
             response = await self.simulate_request(UNKNOWN_EVENT_PAYLOAD, handler_instance=handler_with_mocks)
@@ -247,6 +306,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.mock_follow_handler.assert_not_called()
         self.mock_subscription_handler.assert_not_called()
         self.mock_gifted_subscription_handler.assert_not_called()
+        self.mock_renewal_handler.assert_not_called() # Added for renewal
 
     # --- Test Error Handling in Specific Handler (Task 4.5.4) ---
     async def test_handler_exception_propagates_to_500(self):
@@ -265,6 +325,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         # Ensure other handlers are also mocked to avoid side effects if dispatch is wrong
         handler_with_erroring_mock.register_event_handler("channel.subscription.new", self.mock_subscription_handler)
         handler_with_erroring_mock.register_event_handler("channel.subscription.gifts", self.mock_gifted_subscription_handler)
+        handler_with_erroring_mock.register_event_handler("channel.subscription.renewal", self.mock_renewal_handler)
 
         with self.assertLogs(logger='kickbot.kick_webhook_handler', level='ERROR') as cm:
             response = await self.simulate_request(VALID_FOLLOW_PAYLOAD, handler_instance=handler_with_erroring_mock)
@@ -680,6 +741,377 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
             f"AWARD_POINTS_PLACEHOLDER: Would award 100 points to {VALID_SUBSCRIBE_PAYLOAD['data']['subscriber']['username']} (ID: {VALID_SUBSCRIBE_PAYLOAD['data']['subscriber']['id']}) for new subscription.",
             info_logs
         )
+
+    # --- Tests for handle_gifted_subscription_event (User Story 6.3) ---
+
+    async def test_handle_gifted_sub_event_new_system_disabled(self):
+        """Test no actions for gifted subs if enable_new_webhook_system is False."""
+        handler_disabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=False, # System disabled
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True, "AwardPointsToGifter": True, "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True, "PointsToRecipient": 25
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_disabled.handle_gifted_subscription_event(parsed_event)
+        
+        self.mock_kick_bot.send_text.assert_not_called()
+        self.assertIn(f"New webhook system disabled. Skipping detailed processing for GiftedSubscriptionEvent: {VALID_GIFTED_SUB_PAYLOAD['id']}", cm.output[0])
+        self.assertNotIn("AWARD_POINTS_PLACEHOLDER", ''.join(cm.output))
+
+    async def test_handle_gifted_sub_event_all_actions_enabled_single_gift(self):
+        """Test all actions for a single gifted sub when flags are true."""
+        single_gift_payload = VALID_GIFTED_SUB_PAYLOAD.copy()
+        single_gift_payload["data"] = single_gift_payload["data"].copy()
+        single_gift_payload["data"]["recipients"] = [VALID_GIFTED_SUB_PAYLOAD["data"]["recipients"][0]] # Single recipient
+        
+        handler_enabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True, "AwardPointsToGifter": True, "PointsToGifterPerSub": 70,
+                "AwardPointsToRecipients": True, "PointsToRecipient": 30
+            }
+        )
+        parsed_event = parse_kick_event_payload(single_gift_payload)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        gifter_username = single_gift_payload["data"]["gifter"]["username"]
+        gifter_id = single_gift_payload["data"]["gifter"]["id"]
+        recipient_username = single_gift_payload["data"]["recipients"][0]["username"]
+        recipient_id = single_gift_payload["data"]["recipients"][0]["id"]
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_enabled.handle_gifted_subscription_event(parsed_event)
+
+        expected_message = f"Huge thanks to {gifter_username} for gifting a sub to {recipient_username}! Welcome to the club!"
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
+        
+        log_content = ''.join(cm.output)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 70 points (70 per sub * 1 subs) to gifter {gifter_username} (ID: {gifter_id}).", log_content)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 30 points to recipient {recipient_username} (ID: {recipient_id}) from gifted sub.", log_content)
+
+    async def test_handle_gifted_sub_event_all_actions_enabled_multiple_gifts(self):
+        """Test all actions for multiple gifted subs when flags are true."""
+        handler_enabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True, "AwardPointsToGifter": True, "PointsToGifterPerSub": 60,
+                "AwardPointsToRecipients": True, "PointsToRecipient": 35
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD) # Uses 2 recipients by default
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        gifter_username = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["username"]
+        gifter_id = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["id"]
+        recipients_data = VALID_GIFTED_SUB_PAYLOAD["data"]["recipients"]
+        recipient_usernames_str = f"{recipients_data[0]['username']}, {recipients_data[1]['username']}"
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_enabled.handle_gifted_subscription_event(parsed_event)
+
+        expected_message = f"Wow! {gifter_username} just gifted 2 subs to the community! Thanks so much! Welcome {recipient_usernames_str}!"
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
+        
+        log_content = ''.join(cm.output)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 120 points (60 per sub * 2 subs) to gifter {gifter_username} (ID: {gifter_id}).", log_content)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 35 points to recipient {recipients_data[0]['username']} (ID: {recipients_data[0]['id']}) from gifted sub.", log_content)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 35 points to recipient {recipients_data[1]['username']} (ID: {recipients_data[1]['id']}) from gifted sub.", log_content)
+
+    async def test_handle_gifted_sub_event_chat_disabled(self):
+        """Test only points logging when chat message for gifted subs is disabled."""
+        handler_chat_disabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": False, "AwardPointsToGifter": True, "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True, "PointsToRecipient": 25
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        gifter_username = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["username"]
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_chat_disabled.handle_gifted_subscription_event(parsed_event)
+
+        self.mock_kick_bot.send_text.assert_not_called()
+        log_content = ''.join(cm.output)
+        self.assertIn(f"'SendThankYouChatMessage' for gifted subs is disabled. Skipping message for gifter {gifter_username}.", log_content)
+        self.assertIn("AWARD_POINTS_PLACEHOLDER: Would award 100 points", log_content) # Gifter: 50*2
+        self.assertIn("AWARD_POINTS_PLACEHOLDER: Would award 25 points to recipient", log_content) # Recipients
+
+    async def test_handle_gifted_sub_event_gifter_points_disabled(self):
+        """Test chat and recipient points when gifter points are disabled."""
+        handler_gifter_pts_disabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True, "AwardPointsToGifter": False, "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True, "PointsToRecipient": 25
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        gifter_username = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["username"]
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_gifter_pts_disabled.handle_gifted_subscription_event(parsed_event)
+
+        self.mock_kick_bot.send_text.assert_called_once() # Chat message should be sent
+        log_content = ''.join(cm.output)
+        self.assertIn(f"'AwardPointsToGifter' for gifted subs is disabled. Skipping points for gifter {gifter_username}.", log_content)
+        self.assertNotIn("AWARD_POINTS_PLACEHOLDER: Would award 100 points", log_content) # Gifter points shouldn't be there
+        self.assertIn("AWARD_POINTS_PLACEHOLDER: Would award 25 points to recipient", log_content) # Recipients
+
+    async def test_handle_gifted_sub_event_recipient_points_disabled(self):
+        """Test chat and gifter points when recipient points are disabled."""
+        handler_recip_pts_disabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True, "AwardPointsToGifter": True, "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": False, "PointsToRecipient": 25
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_recip_pts_disabled.handle_gifted_subscription_event(parsed_event)
+
+        self.mock_kick_bot.send_text.assert_called_once() # Chat message should be sent
+        log_content = ''.join(cm.output)
+        self.assertIn(f"'AwardPointsToRecipients' for gifted subs is disabled. Skipping points for recipients.", log_content)
+        self.assertIn("AWARD_POINTS_PLACEHOLDER: Would award 100 points", log_content) # Gifter points
+        self.assertNotIn(f"AWARD_POINTS_PLACEHOLDER: Would award 25 points to recipient {VALID_GIFTED_SUB_PAYLOAD['data']['recipients'][0]['username']}", log_content) # Recipient points shouldn't be there
+
+    async def test_handle_gifted_sub_event_anonymous_gifter(self):
+        """Test behavior with an anonymous gifter."""
+        anon_gift_payload = VALID_GIFTED_SUB_PAYLOAD.copy()
+        anon_gift_payload["data"] = anon_gift_payload["data"].copy()
+        anon_gift_payload["data"]["gifter"] = None # Anonymous gifter
+
+        handler_anon = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True, "AwardPointsToGifter": True, "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True, "PointsToRecipient": 25
+            }
+        )
+        parsed_event = parse_kick_event_payload(anon_gift_payload)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        recipients_data = anon_gift_payload["data"]["recipients"]
+        recipient_usernames_str = f"{recipients_data[0]['username']}, {recipients_data[1]['username']}"
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_anon.handle_gifted_subscription_event(parsed_event)
+
+        expected_message = f"Wow! Anonymous just gifted 2 subs to the community! Thanks so much! Welcome {recipient_usernames_str}!"
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
+        log_content = ''.join(cm.output)
+        self.assertIn("Cannot award points to gifter as they are Anonymous.", log_content)
+        self.assertNotIn("AWARD_POINTS_PLACEHOLDER: Would award 100 points (50 per sub * 2 subs) to gifter Anonymous", log_content)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 25 points to recipient {recipients_data[0]['username']}", log_content)
+
+    async def test_handle_gifted_sub_event_default_configs_used(self):
+        """Test default behavior if handle_gifted_subscription_event_actions is None."""
+        handler_default = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions=None # Test defaults
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        gifter_username = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["username"]
+        gifter_id = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["id"]
+        recipients_data = VALID_GIFTED_SUB_PAYLOAD["data"]["recipients"]
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_default.handle_gifted_subscription_event(parsed_event)
+        
+        self.mock_kick_bot.send_text.assert_called_once() # Default is True for chat
+        log_content = ''.join(cm.output)
+        # Default: PtsGifter=50, PtsRecip=25
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 100 points (50 per sub * 2 subs) to gifter {gifter_username} (ID: {gifter_id}).", log_content)
+        self.assertIn(f"AWARD_POINTS_PLACEHOLDER: Would award 25 points to recipient {recipients_data[0]['username']}", log_content)
+
+    async def test_handle_gifted_sub_event_invalid_config_uses_defaults(self):
+        # Test that if HandleGiftedSubscriptionEventActions is provided but keys are invalid, it defaults
+        handler_with_specific_config = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": "not_a_bool",
+                "AwardPointsToGifter": "false_text",
+                "PointsToGifterPerSub": "fifty", 
+                "AwardPointsToRecipients": [],
+                "PointsToRecipient": {}}
+        )
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+
+        # Expect defaults to be True for booleans, and specific ints for points
+        expected_thank_you_message = f"Thanks {parsed_event.data.gifter.username} for gifting 1 sub(s) to: {parsed_event.data.giftees[0].username}!" # Example for 1 recipient in this payload config test
+        # Adjust expected_thank_you_message if VALID_GIFTED_SUB_PAYLOAD used in this test has >1 recipient
+        if len(parsed_event.data.giftees) == 2:
+             expected_thank_you_message = f"Thanks {parsed_event.data.gifter.username} for gifting 2 sub(s) to: {parsed_event.data.giftees[0].username}, {parsed_event.data.giftees[1].username}!"
+        
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_with_specific_config.handle_gifted_subscription_event(parsed_event)
+        
+        self.mock_kick_bot.send_text.assert_any_call(expected_thank_you_message) # Default: True
+        
+        info_logs = "\n".join(cm.output)
+        self.assertIn(f"Placeholder: Awarded {handler_with_specific_config.points_to_gifter_per_sub_for_gifted_sub * len(parsed_event.data.giftees)} points to {parsed_event.data.gifter.username}", info_logs) # Default: True, 50 per sub
+        for recipient in parsed_event.data.giftees:
+            self.assertIn(f"Placeholder: Awarded {handler_with_specific_config.points_to_recipient_for_gifted_sub} points to {recipient.username}", info_logs) # Default: True, 25 per recipient
+        
+        self.assertTrue(handler_with_specific_config.send_thank_you_chat_message_for_gifted_sub)
+        self.assertTrue(handler_with_specific_config.award_points_to_gifter_for_gifted_sub)
+        self.assertEqual(handler_with_specific_config.points_to_gifter_per_sub_for_gifted_sub, 50)
+        self.assertTrue(handler_with_specific_config.award_points_to_recipients_for_gifted_sub)
+        self.assertEqual(handler_with_specific_config.points_to_recipient_for_gifted_sub, 25)
+
+    # --- Tests for handle_subscription_renewal_event (User Story 6.4) --- 
+
+    async def test_handle_renewal_event_new_system_disabled(self):
+        """Test no actions for renewal if enable_new_webhook_system is False."""
+        handler_disabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=False, # System disabled
+            handle_subscription_renewal_event_actions={
+                "SendChatMessage": True, "AwardPoints": True, "PointsToAward": 100
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        self.assertIsInstance(parsed_event, SubscriptionRenewalEvent)
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_disabled.handle_subscription_renewal_event(parsed_event)
+        
+        self.mock_kick_bot.send_text.assert_not_called()
+        self.assertIn(f"New webhook system disabled. Skipping detailed processing for SubscriptionRenewalEvent: {parsed_event.id}", "\n".join(cm.output))
+        self.assertNotIn("Placeholder: Awarded", "\n".join(cm.output))
+
+    async def test_handle_renewal_event_all_actions_enabled(self):
+        """Test all actions occur if new system and flags are True."""
+        handler_enabled = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_subscription_renewal_event_actions={
+                "SendChatMessage": True, "AwardPoints": True, "PointsToAward": 150
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        self.assertIsInstance(parsed_event, SubscriptionRenewalEvent)
+
+        expected_message = f"Thanks {parsed_event.data.subscriber.username} for renewing your Tier {parsed_event.data.subscription_tier} sub for {parsed_event.data.months_subscribed} months!"
+
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_enabled.handle_subscription_renewal_event(parsed_event)
+        
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
+        self.assertIn(f"Placeholder: Awarded 150 points to {parsed_event.data.subscriber.username}", "\n".join(cm.output))
+
+    async def test_handle_renewal_event_chat_disabled_points_enabled(self):
+        handler = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot, log_events=False, enable_new_webhook_system=True,
+            handle_subscription_renewal_event_actions={"SendChatMessage": False, "AwardPoints": True, "PointsToAward": 50}
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler.handle_subscription_renewal_event(parsed_event)
+        self.mock_kick_bot.send_text.assert_not_called()
+        self.assertIn(f"Placeholder: Awarded 50 points to {parsed_event.data.subscriber.username}", "\n".join(cm.output))
+        self.assertIn("'SendChatMessage' for subscription renewal event is disabled.", "\n".join(cm.output))
+
+    async def test_handle_renewal_event_chat_enabled_points_disabled(self):
+        handler = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot, log_events=False, enable_new_webhook_system=True,
+            handle_subscription_renewal_event_actions={"SendChatMessage": True, "AwardPoints": False, "PointsToAward": 100}
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        expected_message = f"Thanks {parsed_event.data.subscriber.username} for renewing your Tier {parsed_event.data.subscription_tier} sub for {parsed_event.data.months_subscribed} months!"
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler.handle_subscription_renewal_event(parsed_event)
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
+        self.assertNotIn("Placeholder: Awarded", "\n".join(cm.output))
+        self.assertIn("'AwardPoints' for subscription renewal event is disabled.", "\n".join(cm.output))
+
+    async def test_handle_renewal_event_all_actions_disabled_by_flags(self):
+        handler = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot, log_events=False, enable_new_webhook_system=True,
+            handle_subscription_renewal_event_actions={"SendChatMessage": False, "AwardPoints": False, "PointsToAward": 0}
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler.handle_subscription_renewal_event(parsed_event)
+        self.mock_kick_bot.send_text.assert_not_called()
+        self.assertNotIn("Placeholder: Awarded", "\n".join(cm.output))
+        self.assertIn("'SendChatMessage' for subscription renewal event is disabled.", "\n".join(cm.output))
+        self.assertIn("'AwardPoints' for subscription renewal event is disabled.", "\n".join(cm.output))
+
+    async def test_handle_renewal_event_default_configs_used(self):
+        """Test that default actions occur if handle_subscription_renewal_event_actions is not provided."""
+        handler_default = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True
+            # No handle_subscription_renewal_event_actions provided, so defaults (True, True, 100) should apply
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        expected_message = f"Thanks {parsed_event.data.subscriber.username} for renewing your Tier {parsed_event.data.subscription_tier} sub for {parsed_event.data.months_subscribed} months!"
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_default.handle_subscription_renewal_event(parsed_event)
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
+        self.assertIn(f"Placeholder: Awarded 100 points to {parsed_event.data.subscriber.username}", "\n".join(cm.output))
+        self.assertTrue(handler_default.send_chat_message_for_renewal_sub)
+        self.assertTrue(handler_default.award_points_for_renewal_sub)
+        self.assertEqual(handler_default.points_to_award_for_renewal_sub, 100)
+
+    async def test_handle_renewal_event_invalid_action_config_uses_defaults(self):
+        """Test that if renewal_actions is provided but keys are invalid, it defaults."""
+        handler_invalid_config = KickWebhookHandler(
+            kick_bot_instance=self.mock_kick_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_subscription_renewal_event_actions={
+                "SendChatMessage": "not_a_bool", 
+                "AwardPoints": [], 
+                "PointsToAward": "one_hundred"
+            }
+        )
+        parsed_event = parse_kick_event_payload(VALID_RENEWAL_PAYLOAD)
+        expected_message = f"Thanks {parsed_event.data.subscriber.username} for renewing your Tier {parsed_event.data.subscription_tier} sub for {parsed_event.data.months_subscribed} months!"
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler_invalid_config.handle_subscription_renewal_event(parsed_event)
+        
+        self.mock_kick_bot.send_text.assert_called_once_with(expected_message) # Default: True
+        self.assertIn(f"Placeholder: Awarded 100 points to {parsed_event.data.subscriber.username}", "\n".join(cm.output)) # Default: True, 100 points
+
+        # Check that the handler's attributes reflect the defaults
+        self.assertTrue(handler_invalid_config.send_chat_message_for_renewal_sub)
+        self.assertTrue(handler_invalid_config.award_points_for_renewal_sub)
+        self.assertEqual(handler_invalid_config.points_to_award_for_renewal_sub, 100)
+
 
 if __name__ == '__main__':
     unittest.main() 
