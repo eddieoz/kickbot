@@ -3,16 +3,20 @@ import json
 import logging
 from urllib.parse import quote_plus, urlencode
 import aiohttp
+from aiohttp import web
 import requests
 import websockets
 
 from datetime import timedelta
-from typing import Callable, Optional
+from typing import Callable, Optional, Any, Coroutine, List, Dict
 
 from .constants import KickBotException
 from .kick_client import KickClient
 from .kick_message import KickMessage
 from .kick_moderator import Moderator
+from .kick_webhook_handler import KickWebhookHandler
+from .kick_auth_manager import KickAuthManager
+from .kick_event_manager import KickEventManager
 from .kick_helper import (
     get_ws_uri,
     get_streamer_info,
@@ -31,7 +35,6 @@ from utils.TwitchMarkovChain.Timer import LoopingTimer
 from TwitchWebsocket import Message, TwitchWebsocket
 import socket, time, logging, re, string
 from nltk.tokenize import sent_tokenize
-from typing import List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,16 @@ class KickBot:
         handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         self.logger.addHandler(handler)
 
-        self.client: KickClient = KickClient(username, password)
+        # HTTP Session for all aiohttp requests - to be initialized in run()
+        self.http_session: Optional[aiohttp.ClientSession] = None
+
+        # KickClient will be initialized after http_session is ready
+        self.client: Optional[KickClient] = None
+        # Auth Manager will be initialized after client is ready
+        self.auth_manager: Optional[KickAuthManager] = None
+        # Event Manager will be initialized after auth_manager and broadcaster_id are ready
+        self.event_manager: Optional[KickEventManager] = None
+
         self._ws_uri = get_ws_uri()
         self._socket_id: Optional[str] = None
         self.streamer_name: Optional[str] = None
@@ -67,12 +79,21 @@ class KickBot:
         self.timed_events: list[tuple[timedelta, Callable]] = []
         self._is_active = True
 
+        # Webhook Handler
+        self.webhook_handler: Optional[KickWebhookHandler] = None
+        self.webhook_runner: Optional[web.AppRunner] = None
+        self.webhook_site: Optional[web.TCPSite] = None
+        self.webhook_enabled: bool = False
+        self.webhook_path: str = "/kick/events"
+        self.webhook_port: int = 8080
+
+        # Event Subscription Config
+        self.kick_events_to_subscribe: List[Dict[str, Any]] = []
+
         # Markov Chain
         self.prev_message_t = 0
         self._enabled = True
-        # This regex should detect similar phrases as links as Twitch does
         self.link_regex = re.compile("\w+\.[a-z]{2,}")
-        # List of moderators used in blacklist modification, includes broadcaster
         self.mod_list = []
         self.set_blacklist()
 
@@ -127,6 +148,21 @@ class KickBot:
         self.sent_separator = settings["SentenceSeparator"]
         self.allow_generate_params = settings["AllowGenerateParams"]
         self.generate_commands = tuple(settings["GenerateCommands"])
+        
+        # Load Webhook settings
+        self.webhook_enabled = settings.get("KickWebhookEnabled", False)
+        self.webhook_path = settings.get("KickWebhookPath", "/kick/events")
+        self.webhook_port = settings.get("KickWebhookPort", 8080)
+
+        # Load Event Subscription settings
+        raw_events = settings.get("KickEventsToSubscribe", [])
+        # Basic validation for event structure
+        self.kick_events_to_subscribe = [
+            event for event in raw_events 
+            if isinstance(event, dict) and "name" in event and "version" in event
+        ]
+        if len(self.kick_events_to_subscribe) != len(raw_events):
+            self.logger.warning("Some configured Kick events to subscribe were invalid and have been filtered out.")
 
     def send_help_message(self) -> None:
         """Send a Help message to the connected chat, as long as the bot wasn't disabled."""
@@ -182,11 +218,143 @@ class KickBot:
         """
         Main function to activate the bot polling.
         """
+        loop = asyncio.get_event_loop()
         try:
-            asyncio.run(self._poll())
+            loop.run_until_complete(self.run())
         except KeyboardInterrupt:
-            logger.info("Bot stopped.")
+            self.logger.info("Bot stopping due to KeyboardInterrupt...")
+        finally:
+            if loop.is_running():
+                 loop.run_until_complete(self.shutdown())
+            else:
+                 asyncio.run(self.shutdown())
+            self.logger.info("Bot stopped.")
+
+    async def run(self):
+        """Main async method to run bot components."""
+        self.http_session = aiohttp.ClientSession()
+        self.logger.info("aiohttp.ClientSession created.")
+
+        # Initialize KickClient with the session
+        # Assuming KickBot's username and password are for KickClient
+        kick_email = settings.get("KickEmail") # Get from global settings loaded at module level
+        kick_pass = settings.get("KickPass")
+        if not kick_email or not kick_pass:
+            self.logger.error("KickEmail or KickPass not found in settings.json. Cannot initialize KickClient.")
+            await self.shutdown() # Or raise an exception
             return
+        self.client = KickClient(kick_email, kick_pass, session=self.http_session)
+
+        # Initialize KickAuthManager
+        # KickAuthManager loads its core OAuth parameters (client_id, client_secret, redirect_uri, scopes)
+        # directly from environment variables (e.g., populated by a .env file).
+        # The constructor can take overrides if needed, or a custom token_file path.
+        try:
+            # The `KickAuthManager` provided does not take `client` in its actual __init__ signature shown.
+            # It manages its own aiohttp.ClientSession for its specific token requests.
+            # Allow overriding default token file via settings.json if desired.
+            token_file_override = settings.get("KICK_TOKEN_FILE_PATH", None) 
+            
+            # Scopes and redirect_uri can also be overridden from settings if desired,
+            # otherwise KAM uses .env values. For this example, we assume .env is primary for them.
+            # If you want settings.json to override .env for redirect_uri or scopes:
+            # kam_redirect_uri = settings.get("KICK_REDIRECT_URI_OVERRIDE", None)
+            # kam_scopes_list = settings.get("KICK_SCOPES_OVERRIDE", None)
+            # kam_scopes_str = " ".join(kam_scopes_list) if kam_scopes_list else None
+            # self.auth_manager = KickAuthManager(
+            #    redirect_uri=kam_redirect_uri,
+            #    scopes=kam_scopes_str,
+            #    token_file=token_file_override
+            # )
+            
+            self.auth_manager = KickAuthManager(token_file=token_file_override)
+            self.logger.info("KickAuthManager initialized (credentials and core config expected from .env).")
+
+        except ValueError as e: # KickAuthManager raises ValueError if KICK_CLIENT_ID or KICK_REDIRECT_URI is missing from .env and not passed
+            self.logger.error(f"Failed to initialize KickAuthManager: {e}. Ensure KICK_CLIENT_ID and KICK_REDIRECT_URI are set in .env.")
+            await self.shutdown()
+            return
+        except Exception as e: # Catch any other unexpected init errors from KickAuthManager
+            self.logger.error(f"Unexpected error initializing KickAuthManager: {e}", exc_info=True)
+            await self.shutdown()
+            return
+        # self.logger.info("KickAuthManager initialized.") # Redundant due to log message in try block
+
+        # Perform initial token acquisition or validation
+        try:
+            initial_token = await self.auth_manager.get_valid_token()
+            if not initial_token:
+                self.logger.error("Failed to obtain initial valid token. Event subscriptions will likely fail. Manual OAuth grant may be required.")
+                # Depending on bot's design, either stop or continue with warnings.
+                # For User Story 3, we need this token.
+            else:
+                self.logger.info("Successfully obtained/validated initial access token.")
+        except Exception as e:
+            self.logger.error(f"Error during initial token validation: {e}. Event subscriptions may fail.", exc_info=True)
+            # Handle critical failure, perhaps shutdown if token is essential for all operations
+
+        # Start Webhook Server (needs to be up before subscribing to events)
+        await self._start_webhook_server()
+
+        # Initialize KickEventManager if streamer_info is available
+        # set_streamer is usually called before poll/run. If not, this needs adjustment.
+        # For now, let's assume set_streamer has been called and streamer_info is populated.
+        if self.streamer_info and self.streamer_info.get('id') and self.auth_manager and self.client:
+            self.event_manager = KickEventManager(
+                auth_manager=self.auth_manager,
+                client=self.client,
+                broadcaster_user_id=self.streamer_info['id']
+            )
+            self.logger.info(f"KickEventManager initialized for broadcaster ID: {self.streamer_info['id']}.")
+            
+            # Subscribe to configured events
+            if self.webhook_enabled and self.kick_events_to_subscribe:
+                self.logger.info(f"Attempting to subscribe to configured Kick events: {self.kick_events_to_subscribe}")
+                await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
+            elif not self.webhook_enabled:
+                self.logger.info("Webhook server is not enabled, skipping Kick event subscriptions.")
+            else:
+                self.logger.info("No Kick events configured to subscribe to.")
+        else:
+            self.logger.warning("Streamer info not set or AuthManager/Client not ready. Cannot initialize KickEventManager or subscribe to events yet.")
+            # This implies set_streamer() must be called before run() can fully set up event subscriptions.
+
+        await self._poll()
+
+    async def shutdown(self):
+        """Gracefully shutdown bot components."""
+        self.logger.info("Initiating bot shutdown...")
+        self._is_active = False
+
+        # Unsubscribe from Kick events if manager exists
+        if self.event_manager:
+            self.logger.info("Unsubscribing from Kick events...")
+            await self.event_manager.clear_all_my_broadcaster_subscriptions()
+            self.event_manager = None
+
+        if hasattr(self, 'ws_connection') and self.ws_connection and not self.ws_connection.closed:
+            try:
+                await self.ws_connection.close()
+                self.logger.info("WebSocket connection closed.")
+            except Exception as e:
+                self.logger.error(f"Error closing WebSocket connection: {e}", exc_info=True)
+        
+        if hasattr(self, 'ws') and isinstance(self.ws, TwitchWebsocket):
+            try:
+                self.ws.stop()
+                self.logger.info("MarkovChain TwitchWebsocket stopped.")
+            except Exception as e:
+                self.logger.error(f"Error stopping MarkovChain TwitchWebsocket: {e}", exc_info=True)
+
+        await self._stop_webhook_server()
+
+        # Close aiohttp.ClientSession
+        if self.http_session:
+            await self.http_session.close()
+            self.logger.info("aiohttp.ClientSession closed.")
+            self.http_session = None
+
+        self.logger.info("Bot shutdown complete.")
 
     def set_streamer(self, streamer_name: str) -> None:
         """
@@ -195,12 +363,45 @@ class KickBot:
         :param streamer_name: Username of the streamer for the bot to monitor
         """
         if self.streamer_name is not None:
-            raise KickBotException("Streamer already set. Only able to set one streamer at a time.")
+            # If changing streamer, existing event subscriptions for old streamer should be cleared.
+            # This simple implementation doesn't handle streamer changes gracefully for event manager yet.
+            # For now, it assumes set_streamer is called once.
+            raise KickBotException("Streamer already set. Changing streamer during runtime is not fully supported for event subscriptions yet.")
+        
         self.streamer_name = streamer_name
         self.streamer_slug = streamer_name.replace('_', '-')
-        get_streamer_info(self)
+        
+        # Ensure client is available for these helper calls if they use it
+        if not self.client:
+            # This is a problem if set_streamer is called before run() initializes self.client
+            # This indicates a potential design issue in initialization order.
+            # For now, log an error. A robust solution would ensure client is ready.
+            self.logger.error("KickClient not initialized when set_streamer was called. API calls in set_streamer might fail.")
+            # Ideally, `get_streamer_info` etc. should take the client as an argument or use one from `self`
+            # that is guaranteed to be initialized.
+        
+        get_streamer_info(self) # This populates self.streamer_info, including id
         get_chatroom_settings(self)
         get_bot_settings(self)
+
+        # Initialize EventManager here if all dependencies are met
+        # This makes more sense than in run(), as broadcaster_id is now known.
+        if self.streamer_info and self.streamer_info.get('id') and self.auth_manager and self.client:
+            if self.event_manager is None: # Initialize only once
+                self.event_manager = KickEventManager(
+                    auth_manager=self.auth_manager,
+                    client=self.client,
+                    broadcaster_user_id=self.streamer_info['id']
+                )
+                self.logger.info(f"KickEventManager initialized within set_streamer for broadcaster ID: {self.streamer_info['id']}.")
+                # Subscription logic will be handled in run() after token validation and webhook server start.
+            else:
+                 # If event_manager exists, and streamer_id changes, it needs re-initialization or update.
+                 # Current check for self.streamer_name prevents this path for now.
+                 pass 
+        elif not (self.auth_manager and self.client):
+            self.logger.warning("AuthManager or KickClient not ready during set_streamer. EventManager not initialized.")
+
         if self.is_mod:
             self.moderator = Moderator(self)
             logger.info(f"Bot is confirmed as a moderator for {self.streamer_name}...")
@@ -294,7 +495,6 @@ class KickBot:
         if not type(reply_message) == str or reply_message.strip() == "":
             raise KickBotException("Invalid reply message. Must be a non empty string.")
         
-        # Check if the reply message contains '@@Restream'
         if '@@Restream' in reply_message:
             self.logger.warning(f"Skipping reply to avoid breaking: {reply_message!r}")
             return
@@ -320,8 +520,6 @@ class KickBot:
                     duration = 9000
                     parameters = f'gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
                     url = settings['Alerts']['Host'] + '/trigger_alert?' + parameters + '&api_key=' + settings['Alerts']['ApiKey']
-                    # alert = requests.get(url)
-                    # logging.info(alert.text)
                     async with session.get(url) as response:
                         response_text = await response.text()
                         logging.info(response_text)
@@ -350,223 +548,147 @@ class KickBot:
         else:
             logger.warning(f"Invalid log level: {log_level}")
 
-    ########################################################################################
-    #    INTERNAL FUNCTIONS
-    ########################################################################################
+    async def _start_webhook_server(self):
+        if not self.webhook_enabled:
+            self.logger.info("Webhook server is disabled in settings.")
+            return
+
+        if self.webhook_handler is None:
+            self.webhook_handler = KickWebhookHandler(
+                webhook_path=self.webhook_path,
+                port=self.webhook_port,
+                log_events=True
+            )
+
+        app = web.Application()
+        app.router.add_post(self.webhook_handler.webhook_path, self.webhook_handler.handle_webhook)
+        
+        self.webhook_runner = web.AppRunner(app)
+        await self.webhook_runner.setup()
+        self.webhook_site = web.TCPSite(self.webhook_runner, host='0.0.0.0', port=self.webhook_handler.port)
+        try:
+            await self.webhook_site.start()
+            self.logger.info(f"Webhook server started on port {self.webhook_handler.port} at path {self.webhook_handler.webhook_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to start webhook server: {e}", exc_info=True)
+            self.webhook_site = None
+            if self.webhook_runner:
+                await self.webhook_runner.cleanup()
+                self.webhook_runner = None
+
+    async def _stop_webhook_server(self):
+        if self.webhook_site:
+            try:
+                await self.webhook_site.stop()
+                self.logger.info("Webhook server stopped.")
+            except Exception as e:
+                self.logger.error(f"Error stopping webhook site: {e}", exc_info=True)
+            self.webhook_site = None
+        
+        if self.webhook_runner:
+            try:
+                await self.webhook_runner.cleanup()
+                self.logger.info("Webhook runner cleaned up.")
+            except Exception as e:
+                self.logger.error(f"Error cleaning up webhook runner: {e}", exc_info=True)
+            self.webhook_runner = None
+        self.webhook_handler = None
 
     async def _poll(self) -> None:
         """
-        Main internal function to poll the streamers chat and respond to messages/commands.
-        Create a task for each timed event in self.timed_events.
+        Main loop for handling events and messages for the Kick WebSocket.
+        This will now run as part of the main `run` method.
         """
-        for frequency, func in self.timed_events:
-            try: 
-                asyncio.create_task(self._run_timed_event(frequency, func))
-            except:
-                logger.warning(f"Error creating task for timed event {func.__name__}")
+        if self.streamer_name is None:
+            raise KickBotException("Must set streamer name to monitor first.")
 
-        async with websockets.connect(self._ws_uri) as self.sock:
-            connection_response = await self._recv()
-            
-            await self._handle_first_connect(connection_response)
+        timed_event_tasks = []
+        for time, func in self.timed_events:
+            timed_event_tasks.append(asyncio.create_task(self._run_timed_event(time, func)))
+        
+        async with websockets.connect(self._ws_uri) as websocket:
+            self.ws_connection = websocket
+            self.logger.info(f"Connected to {self.streamer_name}'s chat via WebSocket.")
             await self._join_chatroom(self.chatroom_id)
-            while True:
+
+            while self._is_active:
                 try:
-                    response = await self._recv()
-                    # logger.info(f"System message {response.get('event')}")
-                    logger.info(f"System message {response}")
-                    
-                    if response.get('event') == 'App\Events\ChatMessageEvent':
-                        message = str(json.loads(response.get('data')).get('content'))
-                        sender = str(json.loads(response.get('data')).get('sender').get('username'))
-                        if 'gerard' in message.casefold():
+                    message = await asyncio.wait_for(self._recv(), timeout=1.0)
+                    if message:
+                        event_type = message.get("event")
+                        data = message.get("data")
+
+                        if data and isinstance(data, str):
                             try:
-                                req = requests.post("http://192.168.0.30:7862/update_chat", json={'nickname': sender, 'context': message})
-                                if req.status_code == 200:
-                                    print("Context updated successfully.")
+                                data = json.loads(data)
+                            except json.JSONDecodeError:
+                                self.logger.warning(f"Could not decode JSON data: {data}")
+                                continue
+
+                        if event_type == "App\\Events\\SocketMessageEvent":
+                            self.logger.debug(f"Received SocketMessageEvent: {message}")
+                            if data:
+                                if isinstance(data, str):
+                                    try:
+                                        inner_data = json.loads(data)
+                                    except json.JSONDecodeError:
+                                        self.logger.error(f"Failed to parse inner JSON data from SocketMessageEvent: {data}")
                                 else:
-                                    print(f"Failed to update context: {req.status_code}")
-                            except Exception as e:
-                                print(f"Error updating context: {e}")
+                                    inner_data = data
 
-                    if response.get('event') == 'App\\Events\\UserBannedEvent':
-                        await self._handle_ban(response)
-                    if response.get('event') == 'App\\Events\\ChatMessageEvent':
-                        await self._handle_chat_message(response)
-                    # if response.get('event') == 'App\\Events\\GiftedSubscriptionsEvent':
-                    #     # {'event': 'App\\Events\\GiftedSubscriptionsEvent', 
-                    #     # 'data': '{"chatroom_id":1164726,"gifted_usernames":["Khalek"],"gifter_username":"eddieoz"}', 'channel': 'chatrooms.1164726.v2'}
-                    #     await self._handle_gifted_subscriptions(response)
-                except asyncio.exceptions.CancelledError:
-                    break
-        logger.info(f"Disconnected from websocket {self._socket_id}")
-        self._is_active = False
+                                if inner_data:
+                                    if inner_data.get('type') == 'message':
+                                        await self._handle_chat_message(inner_data)
+                                    elif inner_data.get('type') == 'App\\Events\\FollowEvent':
+                                        pass
+                                    elif inner_data.get('type') == 'gifted_subscriptions':
+                                        pass
+                        elif event_type == "pusher:connection_established":
+                            await self._handle_first_connect(message)
+                        elif event_type == "App\\Events\\UserBannedEvent":
+                            if data:
+                                await self._handle_ban(data)
+                        else:
+                            self.logger.info(f"Received unhandled WebSocket event type: {event_type}")
+                            self.logger.debug(f"Full unhandled message: {message}")
 
-    async def _handle_gifted_subscriptions(self, gifter: str, amount: int) -> None:
-        """
-        Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
+                except asyncio.TimeoutError:
+                    continue
+                except websockets.exceptions.ConnectionClosedError as e:
+                    self.logger.error(f"WebSocket connection closed unexpectedly: {e}. Attempting to reconnect...")
+                    if self._is_active:
+                        await asyncio.sleep(5)
+                        break
+                    else:
+                        self.logger.info("WebSocket connection closed during shutdown.")
+                        break
+                except Exception as e:
+                    self.logger.error(f"Error in WebSocket polling loop: {e}", exc_info=True)
+                    if self._is_active:
+                        await asyncio.sleep(5)
+                    else:
+                        break
 
-        :param gifter: Username of the gifter
-        :param amount: Number of subscriptions gifted
-        """
-        if settings['GiftBlokitos'] != 0:
-            blokitos = amount * settings['GiftBlokitos']
-            message = f'!subgift_add {gifter} {blokitos}'
-            r = send_message_in_chat(self, message)
-            if r.status_code != 200:
-                raise KickBotException(f"An error occurred while sending message {message!r}")
-            logger.info(f"Added {blokitos} to user {gifter} for {amount} sub_gifts")
-
-    # async def _handle_gifted_subscriptions(self, inbound_message: dict) -> None:
-    #     """
-    #     Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
-
-    #     :param inbound_message: Raw inbound message from socket
-    #     """
-    #     gifter = json.loads(inbound_message.get('data')).get('gifter_username')
-    #     gifted_usernames = json.loads(inbound_message.get('data')).get('gifted_usernames')
-    #     chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
-
-    #     if settings['GiftBlokitos'] != 0:
-    #         blokitos = len(gifted_usernames) * settings['GiftBlokitos']
-    #         message = f'!subgift_add {gifter} {blokitos}'
-    #         r = send_message_in_chat(self, message)
-    #         if r.status_code != 200:
-    #             raise KickBotException(f"An error occurred while sending message {message!r}")
-    #         logger.info(f"Added {blokitos} to user {gifter} for sub_gifts ({gifted_usernames})")
-
-    async def _handle_ban(self, inbound_message: dict) -> None:
-        """
-        Handles incoming ban events, from the banned user's account and logs the event.
-
-        :param inbound_message: Raw inbound message from socket
-        # 'App\\Events\\UserBannedEvent'
-        # '{"id":"da55e408-c421-40a3-a274-07b031ebe715","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"banned_by":{"id":0,"username":"mzinha","slug":"mzinha"},"expires_at":"2023-10-10T07:56:22+00:00"}'
-        # '{"id":"8fa06ed7-f2cf-4210-8ddb-d497ee661e38","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"banned_by":{"id":0,"username":"mzinha","slug":"mzinha"}}'
-        # 'App\\Events\\UserUnbannedEvent'
-        # '{"id":"7a38feef-b052-4870-8f1a-fd55bbffe38e","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"unbanned_by":{"id":6914823,"username":"mzinha","slug":"mzinha"}}'
-        # '{"id":"9f863fae-a2cc-4124-9ee1-ac56e3ae1569","user":{"id":20886158,"username":"RicardoBotoshi","slug":"ricardobotoshi"},"unbanned_by":{"id":6914823,"username":"mzinha","slug":"mzinha"}}'await self._handle_ban(response)
-        """
-        expired = json.loads(inbound_message.get('data')).get('expires_at')
-        if expired != None:
-            user = json.loads(inbound_message.get('data')).get('user').get('username')
-            ban_by = json.loads(inbound_message.get('data')).get('banned_by').get('username')
-            chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
-            # message = f'!points remove @{user} {settings["BanBlokitos"]}'
-            message = f'#tabanido @{user}'
-            r = send_message_in_chat(self, message)
-            if r.status_code != 200:
-                raise KickBotException(f"An error occurred while sending message {message!r}")
-            await self.send_alert('https://media3.giphy.com/media/up8eu7XYylMrPmLwY4/giphy.gif','https://www.myinstants.com/media/sounds/cartoon-hammer.mp3', message.replace('#', ''), message.replace('#', ''))
-            
-            logger.info(f"Ban user {user} by {ban_by}")
-        else:
-            user = json.loads(inbound_message.get('data')).get('user').get('username')
-            ban_by = json.loads(inbound_message.get('data')).get('banned_by').get('username')
-            chatroom_id = json.loads(inbound_message.get('data')).get('chatroom_id')
-            
-            # message = f'!points remove @{user} {settings["BanBlokitos"]}'
-            message = f'#AVADAA_KEDAVRAA @{user}'
-            r = send_message_in_chat(self, message)
-            # if r.status_code != 200:
-            #     raise KickBotException(f"An error occurred while sending message {message!r}")
-            # await self.send_alert('https://media4.giphy.com/media/54Q8WBE4zDN5e/giphy.gif','https://www.myinstants.com/media/sounds/avadaa-kedavraa.mp3', message.replace('#', ''), message.replace('#', ''))
-            
-            logger.info(f"Ban user {user} by {ban_by}")
-
-    async def _handle_chat_message(self, inbound_message: dict) -> None:
-        """
-        Handles incoming messages, checks if the message.content is in dict of handled commands / messages
-
-        :param inbound_message: Raw inbound message from socket
-        """
-        message: KickMessage = message_from_data(inbound_message)
-        if message.sender.username == self.client.bot_name:
-            return
-
-        content = message.content.casefold()
-        command = message.args[0].casefold()
-        logger.debug(f"New Message from {message.sender.username} | MESSAGE: {content!r}")
-
-        # create a variable in the format var['message'] = content
-        
-        MarkovChain.message_handler(self, content)
-
-        # Check if the message is a gifted subscription message and sent by 'Kicklet'
-        if (message.sender.username == "Kicklet" and 
-            "thank you" in content and 
-            "for the gifted" in content and 
-            "subscriptions" in content):
-            try:
-                # Extract the gifter username and the number of subscriptions
-                parts = content.split()
-                gifter = parts[2].rstrip(',')  # The gifter's username is the third word, after "Thank you,"
-                amount_index = parts.index("gifted") + 1  # The amount is the word after "gifted"
-                amount = int(parts[amount_index])  # Convert the amount to an integer
-                
-                # Call the _handle_gifted_subscriptions method
-                await self._handle_gifted_subscriptions(gifter, amount)
-            except (IndexError, ValueError) as e:
-                logger.error(f"Error parsing gifted subscription message: {e}")
-
-
-        if content in self.handled_messages:
-            message_func = self.handled_messages[content]
-            await message_func(self, message)
-            logger.info(f"Handled Message: {content!r} from user {message.sender.username} ({message.sender.user_id})")
-
-        elif command in self.handled_commands:
-            command_func = self.handled_commands[command]
-            await command_func(self, message)
-            logger.info(f"Handled Command: {command!r} from user {message.sender.username} ({message.sender.user_id})")
-        
-        else:
-            # verify if self.handled_messages is contained in the content variable
-            for msg in self.handled_messages:
-                # if it is, then call the function
-                if msg in content:
-                    message_func = self.handled_messages[msg]
-                    await message_func(self, message)
-                    logger.info(f"Handled Message: {content!r} from user {message.sender.username} ({message.sender.user_id})")
-
-    async def _join_chatroom(self, chatroom_id: int) -> None:
-        """
-         Join the chatroom websocket.
-
-         :param chatroom_id: ID of the chatroom, mainly the streamer to monitor
-         """
-        join_command = {'event': 'pusher:subscribe', 'data': {'auth': '', 'channel': f"chatrooms.{chatroom_id}.v2"}}
-        await self._send(join_command)
-        join_response = await self._recv()
-        if join_response.get('event') != "pusher_internal:subscription_succeeded":
-            raise KickBotException(f"Error when attempting to join chatroom {chatroom_id}. Response: {join_response}")
-        logger.info(f"Bot Joined chatroom {chatroom_id} ({self.streamer_name})")
-
-    async def _handle_first_connect(self, connection_response: dict) -> None:
-        """
-        Handle the initial response received from the websocket.
-
-        :param connection_response: Initial response when connecting to the socket
-        """
-        if connection_response.get('event') != 'pusher:connection_established':
-            raise Exception('Error establishing connection to socket.')
-        self._socket_id = json.loads(connection_response.get('data')).get('socket_id')
-        logger.info(f"Successfully Connected to socket...")
+        for task in timed_event_tasks:
+            task.cancel()
+        await asyncio.gather(*timed_event_tasks, return_exceptions=True)
+        self.logger.info("Timed event tasks cancelled.")
 
     async def _run_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
-        Launched in a thread when a user calls bot.add_timed_event, runs until bot is inactive
-
-        :param frequency_time: Frequency to call the timed function
-        :param timed_function: timed function to be called
+        Wrapper to run timed event. Loop will call the timed_function at specified frequency_time
         """
-        try:
-            while self._is_active:
+        while self._is_active:
+            try:
                 await asyncio.sleep(frequency_time.total_seconds())
-                await timed_function(self)
-                logger.info(f"Timed Event Called")
-        except:
-            logger.warning(f"Error running timed event {timed_function.__name__}")
+                if self._is_active:
+                    await timed_function(self)
+            except asyncio.CancelledError:
+                self.logger.info(f"Timed event {timed_function.__name__} cancelled.")
+                break
+            except Exception as e:
+                self.logger.error(f"Error in timed event {timed_function.__name__}: {e}", exc_info=True)
+                await asyncio.sleep(frequency_time.total_seconds())
 
     async def _send(self, command: dict) -> None:
         """

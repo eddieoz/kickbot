@@ -89,7 +89,11 @@ class KickClient:
         user_info_response = self.scraper.get(url, cookies=self.cookies, headers=headers)
         if user_info_response.status_code != 200:
             raise KickAuthException(f"Error fetching user info from {url}")
-        data = user_info_response.json()
+        try:
+            data = user_info_response.json()
+        except Exception as e:
+            logger.error(f"Failed to parse user info JSON: {e}")
+            raise KickAuthException(f"Failed to parse user info JSON: {e}")
         self.user_data = data
         self.bot_name = data.get('username')
         self.user_id = data.get('id')
@@ -133,15 +137,10 @@ class KickClient:
         input_attempts = 0
         while input_attempts < 3:
             input_code = input("Enter the 2fa code you received from kick: ")
-            try:
-                code = int(input_code)
-                if len(str(code)) != 6:
-                    print("    Invalid input code format.")
-                    input_attempts += 1
-                else:
-                    return str(code)
-            except ValueError:
-                print("    Invalid code input. must consist of numbers only.")
+            if len(input_code) == 6 and input_code.isdigit():
+                return input_code
+            else:
+                print("    Invalid input code format. Must be exactly 6 digits.")
                 input_attempts += 1
         raise KickAuthException("Max 2fa code input attempts reached.")
 

@@ -21,7 +21,11 @@ def get_streamer_info(bot) -> None:
             raise KickHelperException(f"Error retrieving streamer info. Blocked By cloudflare. ({status})")
         case 404:
             raise KickHelperException(f"Streamer info for '{bot.streamer_name}' not found. (404 error) ")
-    data = response.json()
+    try:
+        data = response.json()
+    except Exception as e:
+        logger.error(f"Failed to parse streamer info JSON: {e}")
+        raise KickHelperException(f"Failed to parse streamer info JSON: {e}")
     bot.streamer_info = data
     bot.chatroom_info = data.get('chatroom')
     bot.chatroom_id = bot.chatroom_info.get('id')
@@ -37,7 +41,11 @@ def get_chatroom_settings(bot) -> None:
     response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=BASE_HEADERS)
     if response.status_code != 200:
         raise KickHelperException(f"Error retrieving chatroom settings. Response Status: {response.status_code}")
-    data = response.json()
+    try:
+        data = response.json()
+    except Exception as e:
+        logger.error(f"Failed to parse chatroom settings JSON: {e}")
+        raise KickHelperException(f"Failed to parse chatroom settings JSON: {e}")
     bot.chatroom_settings = data.get('data').get('settings')
 
 
@@ -89,7 +97,11 @@ def message_from_data(message: dict) -> KickMessage:
     data = message.get('data')
     if data is None:
         raise KickHelperException(f"Error parsing message data from response {message}")
-    return KickMessage(data)
+    try:
+        return KickMessage(data)
+    except Exception as e:
+        logger.error(f"Failed to create KickMessage: {e} | Raw data: {data}")
+        raise KickHelperException(f"Failed to create KickMessage: {e}")
 
 
 def send_message_in_chat(bot, message: str) -> requests.Response:
@@ -224,4 +236,8 @@ def get_streamer_leaderboard(bot) -> dict | None:
     if response.status_code != 200:
         logger.warning(f"An error occurred while retrieving leaderboard. Status Code: {response.status_code}")
         return None
-    return response.json()
+    try:
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to parse leaderboard JSON: {e}")
+        return None

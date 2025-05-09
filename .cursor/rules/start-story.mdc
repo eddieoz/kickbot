@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Usind TDD/BDD and [fix-tests.mdc](mdc:.cursor/rules/fix-tests.mdc) start the development of the provided story.

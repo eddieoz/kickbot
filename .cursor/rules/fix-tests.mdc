@@ -1,0 +1,13 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+always use Chain-of-Thought (CoT), Step-by-Step Rationalization (STaR), and Tree of Thoughts (ToT)
+fix tests one by one, isolating the test
+only consider the test completed when it pass the test
+if the test don't pass in 10 attempts, refactor the test from scratch relying in the documentation and working implementation.
+Then update the roadmap with the progress
+- Try to fix things at the cause, not the symptom
+- Tests should not break a working implementation. Don't change files out of scope without asking permission
+- Be very detailed with summarization and do not miss out things that are important

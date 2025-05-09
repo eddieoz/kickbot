@@ -7,6 +7,10 @@ Unofficial python package to create bots and interact with the kick.com api
 ## Table of Contents
 
 - [About](#about)
+- [Important Setup & Configuration](#important-setup--configuration)
+  - [Environment Variables (`.env` file)](#environment-variables-env-file)
+  - [Initial OAuth Authorization (One-Time Step)](#initial-oauth-authorization-one-time-step)
+  - [Dependencies](#dependencies)
 - [Installation](#installation)
 - [Features](#features)
 - [Example](#example)
@@ -15,27 +19,100 @@ Unofficial python package to create bots and interact with the kick.com api
 - [Streamer / Chat information](#streamer-and-chat-information)
 - [Chat Moderation](#chat-moderation)
 - [Timed event functions](#timed-events)
+- [Kick API OAuth Integration](#kick-api-oauth-integration)
+- [Webhooks & Signature Verification](#webhooks-and-signature-verification)
+- [Testing](#testing)
 
 ---
 
 ### Important Update:
 > Kick now seems to require Two-factor authentication on all log in's. The bot will now prompt you in the console 
 > to enter the verification code kick sends to you via email or text, so the bot can log in using the provided code. 
+> This primarily applies to the traditional username/password login for basic chat interaction. The new OAuth method for API events has its own browser-based authorization flow.
 
 ## About
 
 This package allows you to create bots (user bots) to monitor a stream. 
+It supports traditional chat interaction via a user bot account and is being updated to use Kick's official API with OAuth 2.0 for more advanced features like event subscriptions (gifts, new subs, etc.).
 
-You will need to set up a 'user bot' account (a normal user account to act as a bot) for the bot to be able to log in and handle commands / messages.
+You will need to set up a 'user bot' account (a normal user account to act as a bot) for the bot to be able to log in and handle commands / messages using the traditional method.
+For the new API features, you'll need to register an application on Kick and authorize it.
 
 It is reccomended to add the bot user as a moderator for your stream. 
 This will also give you access to additional [moderator functions](#chat-moderation).
+
+---
+
+## Important Setup & Configuration
+
+Before running the bot, especially with the new Kick API features, please follow these setup steps.
+
+### Environment Variables (`.env` file)
+
+Create a `.env` file in the root directory of the project. This file will store sensitive credentials and configuration.
+
+**Example `.env` file:**
+```
+# Credentials for traditional bot login (if used)
+USERBOT_EMAIL="your_bot_email@example.com"
+USERBOT_PASS="your_bot_password"
+
+# Kick Application Credentials for OAuth 2.0 (New API Integration)
+# Get these by registering an application on Kick
+KICK_CLIENT_ID="your_kick_application_client_id"
+KICK_CLIENT_SECRET="your_kick_application_client_secret"
+
+# Redirect URI configured in your Kick Application (must match exactly)
+# Used for the one-time OAuth authorization.
+# If using the provided example script for authorization, this is typically:
+KICK_REDIRECT_URI="http://localhost:8080/callback"
+
+# OAuth Scopes (space-separated)
+# Default: "chatroom:read user:read channel:read events:subscribe"
+KICK_SCOPES="chatroom:read user:read channel:read events:subscribe"
+
+# Webhook configuration (for receiving API events)
+KICK_WEBHOOK_PATH="/kick/events"
+KICK_WEBHOOK_PORT="8000"
+# You might need a tool like ngrok to expose your local webhook during development/testing.
+# The scripts/test_webhook.py script can help with this.
+```
+
+Ensure your actual bot script (e.g., `botoshi.py`) loads these environment variables, typically using a library like `python-dotenv` (which should be in `requirements.txt`).
+
+### Initial OAuth Authorization (One-Time Step)
+
+To enable features that use the new Kick API (like subscribing to gift and subscription events), you need to perform a one-time OAuth authorization. This allows Sr_Botoshi (your Kick Application) to access your Kick account data based on the requested scopes.
+
+1.  **Ensure `.env` is configured:** Your `KICK_CLIENT_ID`, `KICK_CLIENT_SECRET`, and `KICK_REDIRECT_URI` must be correctly set in the `.env` file.
+2.  **Run the authorization helper script:**
+    ```bash
+    conda activate kickbot # Or your virtual environment
+    # Make sure PYTHONPATH is set if running scripts from the root
+    # export PYTHONPATH=$(pwd):$PYTHONPATH 
+    python scripts/kick_auth_example.py --authorize
+    ```
+3.  **Follow browser prompts:** The script will print a URL. Open it in your browser. Log in to Kick if prompted, and then authorize your application.
+4.  **Token file creation:** Upon successful authorization, the script will capture the necessary tokens and save them to a file named `kickbot_tokens.json` in the project's root directory.
+
+The bot will then use `kickbot_tokens.json` to authenticate with the Kick API for features requiring OAuth. It will automatically attempt to refresh the access token when needed. If the refresh token becomes invalid, you may need to repeat this authorization step.
+
+### Dependencies
+
+All required Python packages are listed in `requirements.txt`. Install them using:
+```bash
+pip install -r requirements.txt
+```
+It's highly recommended to use a virtual environment (like conda or venv) for managing dependencies.
+
+---
 
 ## Installation
 
 ```console
 pip install kickbot
 ```
+*Note: For development, you'll typically clone this repository and install dependencies from `requirements.txt` as described above.*
 
 ## Features
 
@@ -352,3 +429,41 @@ async def send_links_in_chat(bot: Kickbot):...
 is ```bot.send_text``` to send a reoccurring message in chat
 
 <br>
+
+## Kick API OAuth Integration
+
+Sr_Botoshi is being updated to integrate with the official Kick API using OAuth 2.0 and PKCE. This enables more robust and secure access to Kick features, especially for receiving real-time events like new subscriptions and gifted subs via webhooks.
+
+- **Authentication:** Managed by `kickbot/kick_auth_manager.py`. Requires a one-time [Initial OAuth Authorization](#initial-oauth-authorization-one-time-step).
+- **Token Management:** Access and refresh tokens are stored in `kickbot_tokens.json` and automatically managed.
+- **Event Subscription:** (Upcoming) The bot will use the OAuth token to subscribe to specific events from the Kick API.
+
+Refer to `docs/authentication.md` for a detailed explanation of the OAuth flow.
+
+## Webhooks & Signature Verification
+
+To receive real-time events from the Kick API (e.g., subscriptions, gifts), the bot implements a webhook endpoint.
+
+- **Webhook Handler:** `kickbot/kick_webhook_handler.py` sets up an HTTP server to listen for events from Kick.
+- **Event Parsing:** Incoming webhook payloads for supported events (like `channel.followed`, `channel.subscribed`, `channel.subscription.gifted`) are parsed into Pydantic models defined in `kickbot/event_models.py`. This provides robust data validation and structured access to event data within the handler methods.
+- **Testing Webhooks:** The `scripts/test_webhook.py` script can be used with `ngrok` to expose your local webhook endpoint for testing.
+- **Signature Verification:** (Planned) Kick sends a signature with webhook events to verify their authenticity. This will be implemented once Kick provides clear documentation on their public key and verification process.
+
+Configuration for the webhook (path, port) is done via the [`.env` file](#environment-variables-env-file).
+For more detailed information on webhook handling, Pydantic models, and how to add new event handlers, please refer to `docs/webhooks_and_signature_verification.md`.
+
+## Testing
+
+### Running Tests
+The project includes a suite of unit and integration tests. To run all tests:
+1. Ensure your conda environment (`kickbot`) is activated.
+2. Ensure `PYTHONPATH` is set correctly if running from the project root: `export PYTHONPATH=$(pwd):$PYTHONPATH`
+3. Execute the test runner script:
+   ```bash
+   ./run_tests.sh
+   ```
+This script handles environment setup and executes `tests/run_tests.py`.
+
+Refer to individual test files in the `tests/` directory for more specific test cases. The `SUMMARY.md` file also contains commands for running specific test modules.
+
+---

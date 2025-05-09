@@ -3,6 +3,8 @@ import sys
 
 from .kick_bot import KickBot
 from .kick_message import KickMessage
+from .kick_webhook_handler import KickWebhookHandler
+from .kick_signature_verifier import KickSignatureVerifier
 
 time_format = "%Y-%m-%d %I:%M.%S %p"
 
