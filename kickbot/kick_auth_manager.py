@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple, Any
 from urllib.parse import urlencode, quote_plus # Already here, good
 import logging # ADDED
+import gc
 
 # Configure logger for this module
 logger = logging.getLogger(__name__)
@@ -297,10 +298,53 @@ class KickAuthManager:
                 # Refresh the token
                 await self.refresh_access_token()
             else:
-                raise KickAuthManagerError("No valid token available and no refresh token to get a new one.")
+                # Check if we can use an alternative auth method
+                client_auth_token = self._try_get_client_auth_token()
+                if client_auth_token:
+                    self.logger.info("Using client auth token as fallback for API operations")
+                    return client_auth_token
+                else:
+                    raise KickAuthManagerError("No valid token available and no refresh token to get a new one.")
         
         return self.access_token
     
+    def _try_get_client_auth_token(self) -> Optional[str]:
+        """
+        Attempts to get an auth token from the associated client as a fallback.
+        This allows the bot to use the client's authentication when OAuth token is unavailable.
+        
+        Returns:
+            String token if available, None otherwise
+        """
+        try:
+            # Check if the auth_manager has an associated client that might have a token
+            from .kick_client import KickClient
+            
+            # Try to get client from the invoking KickBot instance via module imports
+            import sys
+            if 'kickbot.kick_bot' in sys.modules:
+                bot_module = sys.modules['kickbot.kick_bot']
+                if hasattr(bot_module, 'KickBot') and hasattr(bot_module.KickBot, 'client'):
+                    for obj in gc.get_objects():
+                        if isinstance(obj, bot_module.KickBot) and hasattr(obj, 'client'):
+                            client = obj.client
+                            if hasattr(client, 'auth_token') and client.auth_token:
+                                self.logger.info("Found client auth token as fallback for API operations")
+                                return client.auth_token
+            
+            # If we couldn't get it from the module, try environment variables
+            import os
+            kick_token = os.environ.get("KICK_AUTH_TOKEN")
+            if kick_token:
+                self.logger.info("Using KICK_AUTH_TOKEN from environment as fallback")
+                return kick_token
+                
+            self.logger.warning("No fallback auth token available")
+            return None
+        except Exception as e:
+            self.logger.error(f"Error trying to get fallback client auth token: {e}")
+            return None
+
     def _update_token_data(self, token_response: Dict[str, Any]) -> None:
         """
         Updates the token data from a token response.

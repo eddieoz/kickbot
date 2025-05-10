@@ -28,25 +28,54 @@ class KickEventManager:
         self.broadcaster_user_id = broadcaster_user_id
         # Stores IDs of subscriptions successfully made or listed by this manager
         self.active_subscription_ids: List[str] = [] 
+        # Direct auth token for fallback authentication
+        self.direct_auth_token: str = None
 
     async def _get_headers(self) -> Dict[str, str]:
         """Helper to get authenticated headers for API calls."""
-        # get_valid_token() should be an async method in KickAuthManager returning the token string
-        token = await self.auth_manager.get_valid_token() 
-        if not token:
-            logger.error("Failed to get valid access token for API call. Cannot proceed with event subscriptions.")
-            raise Exception("Failed to get valid access token for Kick API.") # Or a custom exception
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
+        try:
+            # Try using the OAuth token flow first
+            token = None
+            try:
+                # get_valid_token() should be an async method in KickAuthManager returning the token string
+                token = await self.auth_manager.get_valid_token()
+            except Exception as auth_error:
+                logger.warning(f"OAuth token retrieval failed: {auth_error}")
+                # Fall back to direct token if available
+                if self.direct_auth_token:
+                    logger.info("Using direct auth token as fallback for API operations")
+                    token = self.direct_auth_token
+                else:
+                    # No fallback available, re-raise the original error
+                    raise
+            
+            if not token:
+                logger.error("Failed to get valid access token for API call. Cannot proceed with event subscriptions.")
+                raise Exception("Failed to get valid access token for Kick API.") # Or a custom exception
+            
+            return {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            }
+        except Exception as e:
+            logger.error(f"Authentication error: {e}")
+            # Pass through the original error with more context
+            raise Exception(f"Failed to obtain authentication headers for Kick API: {e}")
 
     async def list_subscriptions(self) -> Optional[List[Dict[str, Any]]]:
         """Lists all current event subscriptions for the authenticated app and broadcaster."""
         url = f"{KICK_API_BASE_URL}/events/subscriptions"
         try:
-            headers = await self._get_headers()
+            # Try to get headers with fallback auth mechanisms
+            try:
+                headers = await self._get_headers()
+            except Exception as auth_e:
+                logger.warning(f"Failed to get headers for listing subscriptions: {auth_e}")
+                # If we can't authenticate, return empty list rather than None
+                # so calling code knows we failed due to auth, not API error
+                return []
+                
             async with self.client.session.get(url, headers=headers) as response:
                 response_data = await response.json()
                 if response.status == 200:

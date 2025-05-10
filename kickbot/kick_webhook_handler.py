@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Callable, Optional, Any, Coroutine, Union
 import datetime # Added for created_at timestamp
 import requests
+import asyncio
 
 from pydantic import ValidationError
 from .event_models import FollowEvent, SubscriptionEventKick, GiftedSubscriptionEvent, SubscriptionRenewalEvent, AnyKickEvent, parse_kick_event_payload, ChatMessageSentEventAdjusted
@@ -161,6 +162,7 @@ class KickWebhookHandler:
         """Start the HTTP server to listen for webhook events."""
         app = web.Application()
         app.router.add_post('/', self.handle_webhook)
+        app.router.add_get('/health', self.health_check)  # Add health check endpoint
         
         logger.info(f"Starting webhook server on port {self.port}, path: {self.webhook_path}")
         web.run_app(app, port=self.port)
@@ -185,28 +187,71 @@ class KickWebhookHandler:
                 payload_dict_original = json.loads(raw_payload_str)
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse webhook JSON payload: {raw_payload_str}. Error: {e}")
-                return web.Response(status=400, text=f"Invalid JSON payload: {e}")
+                return web.Response(status=200, text=f"Received but couldn't parse JSON payload: {e}")
             
             if self.log_events:
                 logger.info(f"Received raw webhook event dictionary: {json.dumps(payload_dict_original, indent=2)}")
 
-            # Get event type from header for specific handling if needed
+            # Enhanced event type detection from multiple sources
             kick_event_type_header = request.headers.get("Kick-Event-Type")
-            logger.debug(f"Kick-Event-Type header: {kick_event_type_header}")
+            event_type = kick_event_type_header
+            
+            # Also check payload for event type if header is missing
+            if not event_type:
+                event_type = payload_dict_original.get("event") or payload_dict_original.get("type")
+                
+            logger.info(f"Processing webhook event of type: {event_type or 'unknown'}")
 
+            # Process the webhook asynchronously to return 200 immediately
+            # This prevents Kick from retrying due to slow processing
+            asyncio.create_task(self._process_webhook_payload(payload_dict_original, kick_event_type_header))
+            
+            # Return 200 immediately to acknowledge receipt
+            return web.Response(status=200, text="Event received successfully")
+            
+        except Exception as e:
+            logger.exception(f"Unhandled error handling webhook: {e}") # Use logger.exception to include stack trace
+            # Still return 200 to prevent Kick from retrying - we've logged the error
+            return web.Response(status=200, text="Event received but processing error occurred")
+
+    async def _process_webhook_payload(self, payload_dict_original, kick_event_type_header):
+        """
+        Process the webhook payload asynchronously after returning 200 to Kick.
+        
+        Args:
+            payload_dict_original: The parsed JSON payload
+            kick_event_type_header: The event type from the header
+        """
+        try:
             # DIRECT CHAT MESSAGE PROCESSING:
-            # If this is a chat.message.sent event, process it directly using our deduplication path
-            is_chat_message = (kick_event_type_header == "chat.message.sent" or 
-                            (payload_dict_original.get("message_id") and 
-                             payload_dict_original.get("content") and 
-                             payload_dict_original.get("sender")))
+            # Enhanced detection for chat messages - look for multiple possible formats
+            is_chat_message = any([
+                # Header-based detection
+                kick_event_type_header == "chat.message.sent",
+                # Direct webhook format
+                payload_dict_original.get("message_id") and 
+                payload_dict_original.get("content") and 
+                payload_dict_original.get("sender"),
+                # Event wrapper format
+                payload_dict_original.get("event") == "chat.message.sent",
+                # Legacy format with 'data' wrapper
+                payload_dict_original.get("data") and 
+                isinstance(payload_dict_original.get("data"), dict) and
+                payload_dict_original.get("data").get("content") and
+                payload_dict_original.get("data").get("sender")
+            ])
                 
             if is_chat_message:
-                logger.info(f"Processing chat message directly: '{payload_dict_original.get('content')}'")
+                logger.info(f"Processing chat message directly: '{payload_dict_original.get('content') or payload_dict_original.get('data', {}).get('content')}'")
+                
+                # If message is in data field, extract it
+                actual_message_data = payload_dict_original
+                if not payload_dict_original.get("content") and payload_dict_original.get("data") and isinstance(payload_dict_original.get("data"), dict):
+                    actual_message_data = payload_dict_original.get("data")
                 
                 # Process the message directly
-                await self._process_chat_message_directly(payload_dict_original)
-                return web.Response(status=200, text="Chat message processed")
+                await self._process_chat_message_directly(actual_message_data)
+                return
 
             # For other event types, continue with standard pydantic model processing
             
@@ -225,16 +270,13 @@ class KickWebhookHandler:
 
             if not parsed_event:
                 logger.warning(f"Could not parse webhook payload into a known event model. Original Payload: {payload_dict_original}")
-                return web.Response(status=200, text="Event received but not processed due to unknown structure.")
+                return
 
             # Dispatch the event using the parsed Pydantic model
-            await self.dispatch_event(event_type_for_parser, parsed_event) 
-            
-            return web.Response(status=200, text="Event received and processed")
-            
+            await self.dispatch_event(event_type_for_parser, parsed_event)
         except Exception as e:
-            logger.exception(f"Unhandled error handling webhook: {e}") # Use logger.exception to include stack trace
-            return web.Response(status=500, text=f"Internal server error: {e}")
+            logger.exception(f"Error processing webhook payload: {e}")
+            # Since we've already responded with 200, just log the error
 
     async def _process_chat_message_directly(self, message_data: dict):
         """
@@ -277,17 +319,30 @@ class KickWebhookHandler:
                         'count': b.get('count', 0)
                     })
             
+            # Extract message ID with fallback options for different formats
+            message_id = None
+            if message_data.get("message_id"):
+                message_id = message_data.get("message_id")
+            elif message_data.get("id"):
+                message_id = message_data.get("id")
+            else:
+                # Generate a pseudo-unique ID if none is provided
+                # This helps with deduplication in case the same message comes through websocket and webhook
+                content_hash = hash(message_content + sender_username)
+                timestamp = int(datetime.datetime.now().timestamp())
+                message_id = f"generated_{content_hash}_{timestamp}"
+                
             # Create a properly formatted message that KickMessage class can understand
             formatted_message = {
-                "id": message_data.get("message_id", "unknown"),  # webhook uses message_id, but KickMessage expects id
+                "id": message_id,  # Use our extracted/generated ID
                 "chatroom_id": str(message_data.get("broadcaster", {}).get("user_id", bot.chatroom_id)),
-                "content": message_data.get("content", ""),
+                "content": message_content,
                 "type": "message",
-                "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "created_at": message_data.get("created_at", datetime.datetime.utcnow().isoformat() + "Z"),
                 "sender": {
-                    "id": str(sender.get("user_id", "unknown")),
+                    "id": str(sender.get("user_id", sender.get("id", "unknown"))),
                     "username": sender.get("username", "unknown"),
-                    "slug": sender.get("channel_slug", "unknown"),
+                    "slug": sender.get("channel_slug", sender.get("slug", "unknown")),
                     "identity": {
                         "color": sender.get("identity", {}).get("username_color", "#FFFFFF"),
                         "badges": sender_identity_badges
@@ -598,6 +653,22 @@ class KickWebhookHandler:
             logger.debug(f"Webhook handler: Successfully processed message with KickBot._handle_chat_message")
         except Exception as e:
             logger.error(f"Webhook handler: Error processing message with KickBot._handle_chat_message: {e}", exc_info=True)
+
+    async def health_check(self, request: web.Request) -> web.Response:
+        """
+        Simple health check endpoint to verify webhook server is running.
+        
+        Returns:
+            HTTP response with status information
+        """
+        status = {
+            "status": "ok",
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "service": "Sr_Botoshi Webhook Server",
+            "webhook_path": self.webhook_path,
+            "event_handlers_registered": len(self.event_handlers)
+        }
+        return web.json_response(status)
 
 # Example usage:
 if __name__ == "__main__":

@@ -91,29 +91,52 @@ def message_from_data(message: dict) -> KickMessage:
     """
     Return a KickMessage object from the raw message data, containing message and sender attributes.
     
-    This function handles two types of message structures:
+    This function handles various message structure formats:
     1. WebSocket messages: Have a nested 'data' field that contains the actual message
     2. Webhook messages: Direct message structure without a nested 'data' field
+    3. Pydantic model converted messages: May have different field names
     
     :param message: Inbound message from websocket or webhook
     :return: KickMessage object with message and sender attributes
     """
+    # Initialize data to the message itself by default
+    data = message
+    
     # Check if this is a WebSocket message (has 'data' field)
     if 'data' in message:
-        data = message.get('data')
+        data_field = message.get('data')
         # If data is a string (JSON), we need to parse it
-        if isinstance(data, str):
+        if isinstance(data_field, str):
             try:
                 import json
-                data = json.loads(data)
+                data = json.loads(data_field)
             except json.JSONDecodeError:
-                raise KickHelperException(f"Error parsing JSON data from response {message}")
-    else:
-        # This is likely a webhook message, use it directly
-        data = message
-        
+                logger.warning(f"Error parsing JSON data from response {message}")
+                # Continue with original message
+        elif isinstance(data_field, dict):
+            # Use the data field directly
+            data = data_field
+    
+    # Handle edge cases where data might be None
     if data is None:
-        raise KickHelperException(f"Error parsing message data from response {message}")
+        logger.error(f"Error parsing message data from response {message}")
+        # Fallback to using the original message to avoid complete failure
+        data = message
+    
+    # Normalize field names for webhook format
+    # Some webhooks use message_id instead of id
+    if 'message_id' in data and 'id' not in data:
+        data['id'] = data['message_id']
+    
+    # Handle sender variations
+    if 'sender' in data and isinstance(data['sender'], dict):
+        sender = data['sender']
+        # Some webhooks use user_id instead of id for the sender
+        if 'user_id' in sender and 'id' not in sender:
+            sender['id'] = sender['user_id']
+        # Some webhooks use channel_slug instead of slug
+        if 'channel_slug' in sender and 'slug' not in sender:
+            sender['slug'] = sender['channel_slug']
     
     try:
         return KickMessage(data)

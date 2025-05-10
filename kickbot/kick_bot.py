@@ -6,6 +6,7 @@ import aiohttp
 from aiohttp import web
 import requests
 import websockets
+import os
 
 from datetime import timedelta
 from typing import Callable, Optional, Any, Coroutine, List, Dict
@@ -41,7 +42,7 @@ logger = logging.getLogger(__name__)
 with open('settings.json') as f:
     settings = json.load(f)
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 class KickBot:
     """
@@ -49,18 +50,18 @@ class KickBot:
     """
     def __init__(self, username: str, password: str) -> None:
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)  # FORCE DEBUG LEVEL FOR THIS LOGGER INSTANCE
+        self.logger.setLevel(logging.INFO)  # FORCE DEBUG LEVEL FOR THIS LOGGER INSTANCE
         
         # Ensure there's a handler that can output DEBUG messages
         # This might add a duplicate handler if basicConfig is also working, 
         # but for diagnostics, seeing the message is key.
-        if not self.logger.handlers or not any(h.level <= logging.DEBUG for h in self.logger.handlers):
+        if not self.logger.handlers or not any(h.level <= logging.INFO for h in self.logger.handlers):
             # Remove existing handlers if they might be filtering out DEBUG
             for handler in self.logger.handlers[:]:
                 self.logger.removeHandler(handler)
             
             handler = logging.StreamHandler() # Outputs to stderr by default
-            handler.setLevel(logging.DEBUG) # Handler must also be at DEBUG
+            handler.setLevel(logging.INFO) # Handler must also be at DEBUG
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
             self.logger.addHandler(handler)
@@ -392,6 +393,11 @@ class KickBot:
 
             self.client = KickClient(kick_email, kick_pass, aiohttp_session=self.http_session)
             self.logger.info("KickClient initialized.")
+            
+            # Store auth token in environment for fallback auth mechanism
+            if hasattr(self.client, 'auth_token') and self.client.auth_token:
+                os.environ["KICK_AUTH_TOKEN"] = self.client.auth_token
+                self.logger.info("Set KICK_AUTH_TOKEN in environment for fallback authentication")
         
         if not self.auth_manager:
             # Always use the default token file as specified by the user.
@@ -436,18 +442,47 @@ class KickBot:
                                 client=self.client,
                                 broadcaster_user_id=broadcaster_id_val
                             )
+                            # Set direct auth token for fallback authentication
+                            if hasattr(self.client, 'auth_token') and self.client.auth_token:
+                                self.event_manager.direct_auth_token = self.client.auth_token
+                                self.logger.info("Set direct auth token for event manager fallback authentication")
+                            
                             self.logger.info(f"KickEventManager initialized for broadcaster ID: {broadcaster_id_val}.")
                             
                             if self.kick_events_to_subscribe:
                                 self.logger.info(f"Attempting to subscribe to {len(self.kick_events_to_subscribe)} Kick event(s). GHG")
                                 try:
-                                    success = await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
-                                    if success:
-                                        self.logger.info("Successfully (re)subscribed to configured Kick events. GHG")
-                                    else:
-                                        self.logger.warning("Failed to (re)subscribe to some or all configured Kick events. GHG")
+                                    # Add retry logic for event subscription
+                                    max_retries = 3
+                                    retry_delay = 5  # seconds
+                                    success = False
+                                    
+                                    for attempt in range(1, max_retries + 1):
+                                        self.logger.info(f"Event subscription attempt {attempt}/{max_retries}")
+                                        success = await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
+                                        
+                                        if success:
+                                            self.logger.info("Successfully (re)subscribed to configured Kick events.")
+                                            break
+                                        elif attempt < max_retries:
+                                            self.logger.warning(f"Subscription attempt {attempt} failed, retrying in {retry_delay} seconds...")
+                                            await asyncio.sleep(retry_delay)
+                                            # Increase backoff time for next attempt
+                                            retry_delay *= 2
+                                    
+                                    if not success:
+                                        self.logger.error(f"Failed to subscribe to events after {max_retries} attempts.")
+                                        # Continue execution - webhook server will still start in fallback mode
+                                        self.logger.warning("Webhook server will run in fallback mode - bot will process incoming webhook events but Kick won't know to send them.")
+                                        self.logger.warning("You need to manually subscribe to events in the Kick developer portal or ensure the bot has valid authentication.")
                                 except Exception as e:
                                     self.logger.error(f"Error during event resubscription: {e}", exc_info=True)
+                                    # Continue execution even if subscription fails
+                                    self.logger.warning("Webhook server will run in fallback mode - bot will process incoming webhook events but Kick won't know to send them.")
+                                    self.logger.warning("You need to manually subscribe to events in the Kick developer portal or ensure the bot has valid authentication.")
+                                    
+                                # Set up periodic subscription verification
+                                await self.setup_subscription_verification()
                             else:
                                 self.logger.info("No Kick events configured to subscribe to.")
                     else:
@@ -605,24 +640,72 @@ class KickBot:
 
     def add_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
-        Add an event function to be called with a frequency of frequency_time.
-        A tuple containing (time, function) will be added to self.timed_events.
-        Once the main event loop is running, a task is created for each tuple.
+        Add a timed event to be executed periodically.
 
-        :param frequency_time: Time interval between function calls.
-        :param timed_function: Async function to be called.
+        :param frequency_time: How often the event should be executed
+        :param timed_function: Async function to execute
         """
         if self.streamer_name is None:
             raise KickBotException("Must set streamer name to monitor first.")
-        if frequency_time.total_seconds() <= 0:
-            raise KickBotException("Frequency time must be greater than 0.")
-        # Create and store the asyncio task
+        
+        if self._is_active and any(e['function'] == timed_function and e['frequency'] == frequency_time for e in self.timed_events):
+            raise KickBotException(f"Function already set in timed events with frequency {frequency_time}")
+        
+        # Create task to run the timed event
         task = asyncio.create_task(self._run_timed_event(frequency_time, timed_function))
+        
         self.timed_events.append({
-            "interval": frequency_time,
-            "func": timed_function,
+            "frequency": frequency_time,
+            "function": timed_function,
             "task": task
         })
+
+    async def verify_event_subscriptions(self):
+        """
+        Periodically verify that all required event subscriptions are active.
+        If any subscriptions are missing, attempt to resubscribe.
+        """
+        if not self.event_manager or not self.kick_events_to_subscribe or not self.webhook_enabled:
+            self.logger.warning("Cannot verify event subscriptions: event manager not initialized or no events configured")
+            return
+            
+        self.logger.info("Verifying event subscriptions...")
+        try:
+            # Get current subscriptions
+            current_subscriptions = await self.event_manager.list_subscriptions()
+            
+            if current_subscriptions is None:
+                self.logger.error("Failed to list current subscriptions")
+                try:
+                    # Attempt full resubscription
+                    await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
+                except Exception as e:
+                    # If resubscription fails (likely auth error), log but don't crash
+                    self.logger.error(f"Failed to resubscribe during verification: {e}")
+                    self.logger.warning("Webhook server continuing in fallback mode. Manual intervention may be required.")
+                return
+                
+            # Check if all required event types are present
+            required_event_types = {f"{event['name']}:v{event['version']}" for event in self.kick_events_to_subscribe}
+            current_event_types = {f"{sub.get('type')}:v{sub.get('version')}" for sub in current_subscriptions if sub.get('type')}
+            
+            missing_events = required_event_types - current_event_types
+            
+            if missing_events:
+                self.logger.warning(f"Missing event subscriptions: {missing_events}")
+                try:
+                    # Resubscribe to all events to ensure consistency
+                    await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
+                except Exception as e:
+                    # If resubscription fails (likely auth error), log but don't crash
+                    self.logger.error(f"Failed to resubscribe to missing events: {e}")
+                    self.logger.warning("Webhook server continuing in fallback mode. Manual intervention may be required.")
+            else:
+                self.logger.info("All event subscriptions are active")
+                
+        except Exception as e:
+            self.logger.error(f"Error verifying event subscriptions: {e}", exc_info=True)
+            # Don't crash the bot on verification errors
 
     def remove_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
@@ -638,11 +721,11 @@ class KickBot:
         if frequency_time.total_seconds() <= 0:
             raise KickBotException("Frequency time must be greater than 0.")
         # Debug: log current timed_events and function IDs
-        self.logger.debug(f"Current timed_events: {[ (d['interval'], d['func'].__name__, id(d['func'])) for d in self.timed_events ]}")
+        self.logger.debug(f"Current timed_events: {[ (d['frequency'], d['function'].__name__, id(d['function'])) for d in self.timed_events ]}")
         self.logger.debug(f"Attempting to remove: ({frequency_time}, {timed_function.__name__}, id={id(timed_function)})")
         removed = 0
         for event in self.timed_events[:]:
-            if event["interval"] == frequency_time and event["func"] == timed_function:
+            if event["frequency"] == frequency_time and event["function"] == timed_function:
                 event["task"].cancel()
                 self.timed_events.remove(event)
                 removed += 1
@@ -650,6 +733,17 @@ class KickBot:
             self.logger.warning(f"Tried to remove timed event ({timed_function.__name__}, {frequency_time}) but it was not in the list.")
         else:
             self.logger.info(f"Removed {removed} timed event(s) matching ({timed_function.__name__}, {frequency_time}).")
+
+    async def setup_subscription_verification(self):
+        """
+        Set up periodic verification of event subscriptions.
+        Should be called during bot initialization.
+        """
+        if self.webhook_enabled and self.enable_new_webhook_system and self.kick_events_to_subscribe:
+            # Add timed event to verify subscriptions every 30 minutes
+            verification_interval = timedelta(minutes=30)
+            self.add_timed_event(verification_interval, self.verify_event_subscriptions)
+            self.logger.info(f"Subscription verification scheduled every {verification_interval}")
 
     async def send_text(self, message: str) -> None:
         """
@@ -766,6 +860,7 @@ class KickBot:
 
         app = web.Application()
         app.router.add_post(self.webhook_handler.webhook_path, self.webhook_handler.handle_webhook)
+        app.router.add_get('/health', self.webhook_handler.health_check)  # Add health check endpoint
         
         self.webhook_runner = web.AppRunner(app)
         await self.webhook_runner.setup()
