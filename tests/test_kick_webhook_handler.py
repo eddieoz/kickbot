@@ -55,7 +55,7 @@ VALID_GIFTED_SUB_PAYLOAD = {
             {"id": "user_recip_mno", "username": "TestRecipient2"}
         ],
         "tier": "Tier 1",
-        "gifted_at": VALID_DATETIME_PAYLOAD_FORMAT,
+        "created_at": VALID_DATETIME_PAYLOAD_FORMAT,
         "expires_at": "2024-04-10T10:00:00Z"
     }
 }
@@ -67,7 +67,7 @@ VALID_RENEWAL_PAYLOAD = {
     "created_at": VALID_DATETIME_PAYLOAD_FORMAT, # Event creation time
     "data": {
         "subscriber": {"id": "user_renewer_xyz", "username": "LoyalRenewer"},
-        "subscription_tier": "Tier 2", # Field included as per our model
+        "tier": "Tier 2", # Corrected from subscription_tier to use the alias expected by Pydantic model
         "duration": 12, # Cumulative months
         "created_at": VALID_DATETIME_PAYLOAD_FORMAT, # Subscription period start
         "expires_at": "2025-03-10T10:00:00Z"  # Subscription period end
@@ -336,7 +336,7 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         
         # Check that the error from the specific handler was logged, and then the general unhandled error
         event_id = VALID_FOLLOW_PAYLOAD["id"]
-        expected_log_message = f"Error in event handler {erroring_follow_handler_mock.__name__} for event channel.followed ({event_id}): {error_message}"
+        expected_log_message = f"Error in event handler {erroring_follow_handler_mock.name} for event channel.followed ({event_id}): {error_message}"
         self.assertTrue(any(expected_log_message in log_msg for log_msg in cm.output))
 
     # --- Tests for Conditional Logic based on Feature Flags ---
@@ -524,64 +524,32 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         expected_message = f"Thanks for following, {follower_username}!"
         mock_bot.send_text.assert_called_once_with(expected_message)
 
-    async def test_handle_follow_event_invalid_action_config_defaults_to_true(self):
-        """Test that message sends if HandleFollowEventActions is invalid (defaulting to True)."""
-        mock_bot = MagicMock()
-        mock_bot.send_text = AsyncMock()
-
-        # The warning is logged during __init__
-        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='WARNING') as cm:
-            handler = KickWebhookHandler(
-                kick_bot_instance=mock_bot,
-                log_events=False,
-                enable_new_webhook_system=True, # System enabled
-                disable_legacy_gift_handling=False,
-                handle_follow_event_actions={"SendSomeOtherMessage": False} # Invalid key
-            )
+    async def test_handle_follow_event_invalid_config_defaults_and_sends_message(self):
+        # Test that if HandleFollowEventActions is provided but SendChatMessage is not a bool, it defaults to True,
+        # a warning is logged, and the message is still sent.
         
-        self.assertTrue(any("Invalid or missing 'SendChatMessage' in handle_follow_event_actions. Defaulting to True." in log_msg for log_msg in cm.output))
-
-        follower_username = "InvalidConfigFollower"
-        sample_event_data = FollowEventData(
-            follower=FollowerInfo(id="user456", username=follower_username),
-            followed_at=VALID_DATETIME
-        )
-        sample_follow_event = FollowEvent(
-            id="evt_test_follow_invalid_config",
-            event="channel.followed",
-            channel_id="channel_def",
-            created_at=VALID_DATETIME,
-            data=sample_event_data
-        )
-        # await handler.handle_follow_event(sample_follow_event) # Call this outside the assertLogs for __init__ warning
-        
-        # Check that send_text is still called because send_chat_message_for_follow defaults to True
-        # expected_message = f"Thanks for following, {follower_username}!"
-        # mock_bot.send_text.assert_called_once_with(expected_message)
-        
-        # We need to call handle_follow_event to check the send_text behavior after the init warning
-        await handler.handle_follow_event(sample_follow_event)
-        expected_message = f"Thanks for following, {follower_username}!"
-        mock_bot.send_text.assert_called_once_with(expected_message)
-
-    # --- Test Specific Event Handler Logic (US4.4, US6.1, US6.2, US6.3) ---
-
-    async def test_handle_follow_event_new_system_disabled(self):
-        # Test that if HandleFollowEventActions is provided but SendChatMessage is not a bool, it defaults to True
-        handler_with_specific_config = KickWebhookHandler(
-            kick_bot_instance=self.mock_kick_bot,
-            log_events=False,
-            enable_new_webhook_system=True,
-            handle_follow_event_actions={"SendChatMessage": "not_a_bool"} # Invalid config
-        )
         parsed_event = parse_kick_event_payload(VALID_FOLLOW_PAYLOAD)
         self.assertIsInstance(parsed_event, FollowEvent)
 
-        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
-            await handler_with_specific_config.handle_follow_event(parsed_event)
+        # The warning is logged during __init__
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='WARNING') as warn_cm:
+            handler_with_specific_config = KickWebhookHandler(
+                kick_bot_instance=self.mock_kick_bot,
+                log_events=False,
+                enable_new_webhook_system=True, # System is ENABLED for this test
+                handle_follow_event_actions={"SendChatMessage": "not_a_bool"} # Invalid config
+            )
         
+        # Check that the specific warning was logged
+        self.assertIn(
+            "Invalid or missing 'SendChatMessage' in handle_follow_event_actions. Defaulting to True.", 
+            [r.getMessage() for r in warn_cm.records][0] # warn_cm should now have the warning
+        )
+
+        # Now check that the event handler still sends the message due to the default
+        # No need for assertLogs here if we are only checking mock_kick_bot.send_text
+        await handler_with_specific_config.handle_follow_event(parsed_event)
         self.mock_kick_bot.send_text.assert_called_once_with(f"Thanks for following, {VALID_FOLLOW_PAYLOAD['data']['follower']['username']}!")
-        self.assertIn("Invalid or missing 'SendChatMessage' in handle_follow_event_actions. Defaulting to True.", [r.getMessage() for r in cm.records if r.levelname == 'WARNING'][0])
 
     # --- Tests for handle_subscription_event (User Story 6.2) ---
 
@@ -710,31 +678,34 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
 
     async def test_handle_subscription_event_invalid_action_config_uses_defaults(self):
         """Test that invalid parts of handle_subscription_event_actions fall back to defaults."""
-        handler_invalid_config = KickWebhookHandler(
-            kick_bot_instance=self.mock_kick_bot,
-            log_events=False,
-            enable_new_webhook_system=True,
-            handle_subscription_event_actions={
-                "SendChatMessage": "not_a_bool", 
-                "AwardPoints": "another_bad_value", 
-                "PointsToAward": "one_hundred" 
-            }
-        )
         parsed_event = parse_kick_event_payload(VALID_SUBSCRIBE_PAYLOAD)
         self.assertIsInstance(parsed_event, SubscriptionEventKick)
 
-        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='WARNING') as warn_cm: # Check warnings for bad config
-            with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as info_cm: # Check info for actions
-                await handler_invalid_config.handle_subscription_event(parsed_event)
+        # Check warnings for bad config during __init__
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='WARNING') as warn_cm:
+            handler_invalid_config = KickWebhookHandler(
+                kick_bot_instance=self.mock_kick_bot,
+                log_events=False,
+                enable_new_webhook_system=True,
+                handle_subscription_event_actions={
+                    "SendChatMessage": "not_a_bool", 
+                    "AwardPoints": "another_bad_value", 
+                    "PointsToAward": "one_hundred" 
+                }
+            )
         
         # Check that warnings were logged for each invalid config item
-        warning_logs = ''.join(warn_cm.output)
+        warning_logs = '\n'.join(warn_cm.output) # Use newline for multi-line matching
         self.assertIn("Invalid or missing 'SendChatMessage' in handle_subscription_event_actions. Using default.", warning_logs)
         self.assertIn("Invalid or missing 'AwardPoints' in handle_subscription_event_actions. Using default.", warning_logs)
         self.assertIn("Invalid or missing 'PointsToAward' in handle_subscription_event_actions. Using default.", warning_logs)
 
+        # Check info for actions taken by handle_subscription_event
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as info_cm:
+            await handler_invalid_config.handle_subscription_event(parsed_event)
+        
         # Check that default actions were taken (True, True, 100)
-        info_logs = ''.join(info_cm.output)
+        info_logs = '\n'.join(info_cm.output)
         expected_message = f"Welcome to the sub club, {VALID_SUBSCRIBE_PAYLOAD['data']['subscriber']['username']}! Thanks for subscribing."
         self.mock_kick_bot.send_text.assert_called_once_with(expected_message)
         self.assertIn(
@@ -966,21 +937,40 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
         self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
 
-        # Expect defaults to be True for booleans, and specific ints for points
-        expected_thank_you_message = f"Thanks {parsed_event.data.gifter.username} for gifting 1 sub(s) to: {parsed_event.data.giftees[0].username}!" # Example for 1 recipient in this payload config test
-        # Adjust expected_thank_you_message if VALID_GIFTED_SUB_PAYLOAD used in this test has >1 recipient
-        if len(parsed_event.data.giftees) == 2:
-             expected_thank_you_message = f"Thanks {parsed_event.data.gifter.username} for gifting 2 sub(s) to: {parsed_event.data.giftees[0].username}, {parsed_event.data.giftees[1].username}!"
+        # When SendThankYouChatMessage defaults to True, and there are multiple gifts,
+        # the message format is specific.
+        gifter_username = parsed_event.data.gifter.username
+        num_gifted = len(parsed_event.data.giftees)
+        recipient_usernames = [g.username for g in parsed_event.data.giftees]
+        expected_thank_you_message = f"Wow! {gifter_username} just gifted {num_gifted} subs to the community! Thanks so much! Welcome {', '.join(recipient_usernames)}!"
         
+        # Check warnings for bad config are logged during __init__
+        # This assertLogs should wrap the handler instantiation if checking __init__ warnings.
+        # For this test, we primarily care that the *actions* default correctly.
+        # The warnings for __init__ are covered by other tests or can be added if needed.
+
         with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
             await handler_with_specific_config.handle_gifted_subscription_event(parsed_event)
         
-        self.mock_kick_bot.send_text.assert_any_call(expected_thank_you_message) # Default: True
+        self.mock_kick_bot.send_text.assert_any_call(expected_thank_you_message)
         
         info_logs = "\n".join(cm.output)
-        self.assertIn(f"Placeholder: Awarded {handler_with_specific_config.points_to_gifter_per_sub_for_gifted_sub * len(parsed_event.data.giftees)} points to {parsed_event.data.gifter.username}", info_logs) # Default: True, 50 per sub
-        for recipient in parsed_event.data.giftees:
-            self.assertIn(f"Placeholder: Awarded {handler_with_specific_config.points_to_recipient_for_gifted_sub} points to {recipient.username}", info_logs) # Default: True, 25 per recipient
+        # Default points: Gifter=50 per sub, Recipient=25
+        # Check gifter points log
+        expected_gifter_points_log = (
+            f"AWARD_POINTS_PLACEHOLDER: Would award {50 * num_gifted} points "
+            f"(50 per sub * {num_gifted} subs) "
+            f"to gifter {gifter_username} (ID: {parsed_event.data.gifter.id})."
+        )
+        self.assertIn(expected_gifter_points_log, info_logs)
+
+        # Check recipient points log
+        for recipient_info in parsed_event.data.giftees:
+            expected_recipient_points_log = (
+                f"AWARD_POINTS_PLACEHOLDER: Would award {25} points "
+                f"to recipient {recipient_info.username} (ID: {recipient_info.id}) from gifted sub."
+            )
+            self.assertIn(expected_recipient_points_log, info_logs)
         
         self.assertTrue(handler_with_specific_config.send_thank_you_chat_message_for_gifted_sub)
         self.assertTrue(handler_with_specific_config.award_points_to_gifter_for_gifted_sub)

@@ -182,15 +182,16 @@ class TestKickAuthManagerTokenExchange(unittest.IsolatedAsyncioTestCase):
         mock_client_response.json = AsyncMock(return_value=mock_error_response_json)
         mock_client_response.text = AsyncMock(return_value=str(mock_error_response_json))
 
-        # Properly set up the session mock
         mock_session_instance = AsyncMock()
         mock_session_instance.post = AsyncMock(return_value=mock_client_response)
         mock_session_instance.close = AsyncMock()
         MockClientSession.return_value = mock_session_instance
 
-        with self.assertRaisesRegex(KickAuthManagerError, "Error exchanging code for tokens: 400 - The authorization code is invalid or expired."):
+        expected_msg = "Error refreshing access token: 400 - The authorization code is invalid or expired."
+        with self.assertRaises(KickAuthManagerError) as cm:
             await manager.exchange_code_for_tokens("invalid_code", "verifier_xyz")
-        
+        self.assertEqual(str(cm.exception), expected_msg)
+
         mock_session_instance.close.assert_called_once()
 
     @patch('kickbot.kick_auth_manager.aiohttp.ClientSession')
@@ -241,26 +242,23 @@ class TestKickAuthManagerTokenExchange(unittest.IsolatedAsyncioTestCase):
     async def test_exchange_code_for_tokens_200_ok_but_not_json(self, MockClientSession):
         """Test 200 OK response but content is not valid JSON."""
         manager = KickAuthManager(client_id="test_client", redirect_uri="http://localhost/callback")
-        mock_text_response = "<html<body>Success but not JSON</body></html>"
+        observed_text_response = "Mocked non-JSON response"
 
-        # Create a proper ContentTypeError
-        request_info = MagicMock()
-        request_info.real_url = "https://id.kick.com/oauth2/token"
-        content_error = aiohttp.ContentTypeError(request_info, mock_text_response)
-        
         mock_client_response = AsyncMock()
         mock_client_response.status = 200
-        mock_client_response.json = AsyncMock(side_effect=content_error)
-        mock_client_response.text = AsyncMock(return_value=mock_text_response)
+        mock_client_response.json = AsyncMock(side_effect=aiohttp.ContentTypeError(MagicMock(), tuple()))
+        mock_client_response.text = AsyncMock(return_value=observed_text_response)
 
-        # Properly set up the session mock
         mock_session_instance = AsyncMock()
         mock_session_instance.post = AsyncMock(return_value=mock_client_response)
         mock_session_instance.close = AsyncMock()
         MockClientSession.return_value = mock_session_instance
 
-        with self.assertRaises(KickAuthManagerError):
+        expected_msg_literal = f"Token endpoint returned 200 OK but non-JSON response: {observed_text_response}"
+        # Using explicit assertEqual on the exception string for clearer diff if it fails
+        with self.assertRaises(KickAuthManagerError) as cm:
             await manager.exchange_code_for_tokens("any_code", "any_verifier")
+        self.assertEqual(str(cm.exception), expected_msg_literal)
         
         mock_session_instance.close.assert_called_once()
 

@@ -1,6 +1,7 @@
 from typing import Optional, List, Literal, Union
 from pydantic import BaseModel, Field, HttpUrl, RootModel, ValidationError, field_validator
 import datetime
+# import logging # Re-comment import
 
 class UserInfo(BaseModel):
     """Represents basic user information commonly found in events."""
@@ -159,7 +160,9 @@ def parse_kick_event_payload(payload: dict) -> Optional[AnyKickEvent]:
             return model.model_validate(payload)
         except ValidationError as e:
             # Consider logging the validation error details here
-            # logger.warning(f"Pydantic validation error for event {event_type}: {e}")
+            # import logging # Re-comment import
+            # logger = logging.getLogger(__name__) # Re-comment logger get
+            # logger.warning(f"Pydantic validation error for event {event_type}: {e}") # Re-commented
             return None
     return None
 

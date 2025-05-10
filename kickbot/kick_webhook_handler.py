@@ -239,7 +239,8 @@ class KickWebhookHandler:
                 await handler_coro(parsed_event) # Pass the whole parsed event model
             except Exception as e:
                 # Log error from specific handler and re-raise to be caught by handle_webhook for 500 response
-                logger.error(f"Error in event handler {handler_display_name} for event {event_type}: {e}", exc_info=True)
+                # Use event_type from argument to match test expectation more directly.
+                logger.error(f"Error in event handler {handler_display_name} for event {event_type} ({parsed_event.id}): {e}", exc_info=True)
                 raise # Re-raise the exception to be caught by the main handler
         else:
             logger.warning(f"No handler registered for event type: {event_type}")

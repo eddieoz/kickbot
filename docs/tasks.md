@@ -188,26 +188,39 @@
 **So that** we can test thoroughly and switch over with minimal disruption.
 
 **Given-When-Then (Behavior):**
-*   **Given** both the old WebSocket listener and the new webhook event system are active,
-*   **When** an event (e.g., a gifted subscription) occurs that *could* be detected by both,
-*   **Then** both systems might process it, but actions (like awarding points) should be designed to be idempotent or be controlled by a feature flag during transition.
+*   **Given** the `EnableNewWebhookEventSystem` feature flag is `true`,
+*   **When** an event (e.g., a new subscription) occurs,
+*   **Then** the new webhook system should process it and perform configured actions (e.g., send chat message, log points award), independent of any general chat parsing by the old system.
+*   **Given** the `EnableNewWebhookEventSystem` feature flag is `false`,
+*   **When** an event occurs,
+*   **Then** the new webhook system should NOT perform its specific event actions, even if individual action flags (e.g., `HandleSubscriptionEventActions.SendChatMessage`) are true.
 *   **Given** the new system is deemed stable and correct,
-*   **When** a feature flag is switched,
-*   **Then** the old event detection/handling logic for those events (e.g., parsing "Kicklet" messages for gifts) should be disabled, and only the new system should act on them.
+*   **When** the `EnableNewWebhookEventSystem` feature flag is `true`,
+*   **Then** the new system should be the primary handler for follow, new subscription, gifted subscription, and renewal events. (Note: Legacy system was found to have no conflicting specific handlers for these events).
 
-**Status:** In Progress
+**Status:** Complete
 
 **Tasks:**
-- [ ] 1.  **[Development]**
-    *   [x] Introduce feature flags in the configuration (`settings.json`) to control the new webhook event system and disable legacy handlers (e.g., `FeatureFlags.EnableNewWebhookEventSystem`, `FeatureFlags.DisableLegacyGiftEventHandling`).
-    *   Ensure new handler functions (e.g., `new_handle_gifted_subscriptions_event`) have distinct names or are in separate modules to avoid conflicts.
-    *   Introduce feature flags in the configuration (e.g., `USE_WEBHOOK_FOR_GIFTS: true/false`) to control whether the new system's actions are enabled or if the old system's specific event parsing is disabled.
-    *   Review actions taken by event handlers (e.g., sending chat messages, updating databases) to ensure they can be safely run by the new system, potentially in parallel during testing, or are guarded by the feature flags.
-- [ ] 2.  **[Testing]**
-    *   Conduct thorough testing with both systems running to compare behavior and ensure the new system correctly captures all relevant events.
-    *   Monitor logs for any duplicated actions if not handled by idempotency or feature flags.
-- [ ] 3.  **[Documentation]** Document the feature flags and the process for switching over.
-- [ ] 4.  **[Refactor]** Once the new system is fully validated, create tasks to decommission and remove the old WebSocket event parsing logic for events now handled by webhooks.
+- [x] 1.  **[Development - Feature Flags & Configuration Review]**
+    *   [x] Introduce feature flag `EnableNewWebhookEventSystem` in `settings.json` to control all new webhook event system actions. (Implemented and verified in `KickBot` and `KickWebhookHandler`)
+    *   [x] Introduce feature flag `DisableLegacyGiftEventHandling` in `settings.json`. (Implemented. Note: No active conflicting legacy gift processing was found for this flag to gate, so its current effect is minimal. It remains for future-proofing.)
+    *   [x] Ensure new handler functions in `KickWebhookHandler` (e.g., `handle_follow_event`) are distinct and do not conflict with old system method names. (Verified)
+    *   [x] Confirm that new system actions are controlled by `EnableNewWebhookEventSystem` and further refined by specific action configurations (e.g., `HandleFollowEventActions.SendChatMessage`). (Verified)
+    *   [N/A] No further `DisableLegacy...` flags are needed for other events (new subscription, follow, renewal) as no specific conflicting legacy parsing for these events was identified in `KickBot._poll` or `MarkovChain.message_handler`.
+    *   [x] Review actions (chat messages, points logging) in `KickWebhookHandler` to ensure they are guarded by `EnableNewWebhookEventSystem` and specific action flags. (Verified)
+- [x] 2.  **[Testing - New System Functionality and Control]**
+    *   Conduct thorough testing to ensure the new webhook system, when `EnableNewWebhookEventSystem` is `true`, correctly processes each supported event type (follow, new subscription, gifted subscription, renewal) and performs actions (chat messages, points logging) as dictated by their respective `Handle...EventActions` configurations in `settings.json`. (Covered by existing unit tests in `tests/test_kick_webhook_handler.py`)
+    *   Verify that when `EnableNewWebhookEventSystem` is `false`, the new webhook system does NOT perform any of these event-specific actions, regardless of the state of individual `Handle...EventActions` flags. (Covered by existing unit tests)
+    *   Verify that individual action flags (e.g., `HandleSubscriptionEventActions.SendChatMessage: false`) correctly prevent specific actions even when `EnableNewWebhookEventSystem` is `true`. (Covered by existing unit tests)
+    *   Monitor logs for correct behavior and absence of errors under various configurations. (Covered by existing unit tests)
+- [x] 3.  **[Documentation - Feature Flags and Operation]**
+    *   [x] Update `docs/webhooks_and_signature_verification.md` to clearly document the `EnableNewWebhookEventSystem` flag as the master control for new webhook actions.
+    *   [x] Clarify the role and current status of `DisableLegacyGiftEventHandling` in the documentation.
+    *   [x] Ensure documentation emphasizes that individual event action configurations are contingent on `EnableNewWebhookEventSystem` being true.
+    *   [x] Document the overall process for enabling/disabling the new webhook event system and its specific actions for phased rollout or troubleshooting.
+- [ ] 4.  **[Refactor - Future Considerations]**
+    *   Once the new webhook system is fully validated and deemed sufficient for all event-driven needs (follows, subs, gifts, renewals), evaluate the remaining old WebSocket infrastructure (`_poll` loop in `KickBot`, `MarkovChain.message_handler` in the context of event detection rather than Markov sentence generation).
+    *   Create tasks to decommission or refactor parts of the old WebSocket message polling/handling if they become redundant for event processing. (The `MarkovChain` for sentence generation is a separate functionality from event handling).
 
 ---
 
@@ -320,71 +333,4 @@ So that gift subscriptions are properly acknowledged and rewarded by the new eve
   - [x] 1. **[Refactor/Test]** Ensure `settings.json` subscribes to `{"name": "channel.subscription.gifts", "version": 1}`.
   - [x] 2. **[Refactor/Test]** Ensure `kickbot/event_models.py` has an accurate `GiftedSubscriptionEvent` Pydantic model for `channel.subscription.gifts`, aligning its fields (`gifter`, `giftees` (or `recipients`), `tier`, `created_at`, `expires_at`) with Kick docs.
   - [x] 3. **[Development]** In `KickWebhookHandler.handle_gifted_subscription_event` (ensure it takes `event: GiftedSubscriptionEvent`):
-      *   Ensure it uses `self.bot` for sending messages and interacting with points.
-      *   Implement logic for chat messages (thanking gifter, acknowledging recipients).
-      *   Implement logic for awarding points (to gifter and each recipient).
-      *   All new actions must be within the `if self.enable_new_webhook_system:` block.
-  - [x] 4. **[Test]** Write unit tests for `KickWebhookHandler.handle_gifted_subscription_event` in `tests/test_kick_webhook_handler.py`:
-      *   Mock `self.bot.send_text` and points system calls.
-      *   Test actions are performed if `enable_new_webhook_system` is `true` and specific action flags are enabled.
-      *   Test correct thank you messages and points awarded to gifter/recipients.
-      *   Test that actions are not performed if `enable_new_webhook_system` is `false`.
-  - [x] 5. **[Development - Legacy System]**
-      *   [x] **Locate:** Identify the exact code in `KickBot` (likely `_handle_chat_message` or a method it calls) that parses chat messages for gift notifications (e.g., "Kicklet" messages). // Investigation complete; old WS event was `pass`.
-      *   [x] **Gate:** Wrap this old logic with `if not self.disable_legacy_gift_handling:`. The `KickBot` instance needs `self.disable_legacy_gift_handling` correctly set by `set_settings`. // Flag is available in `KickBot`.
-  - [~] 6. **[Test - Legacy System]** Write/adapt integration tests for `KickBot`: // Legacy gift processing via WS was minimal (`pass`); flag `disable_legacy_gift_handling` is available in `KickBot` if any other legacy path needs gating. Focus is on new system's correctness.
-      *   Simulate a chat message that would trigger the old gift processing.
-      *   Test that if `disable_legacy_gift_handling` is `true`, the old actions (mocked) are NOT performed.
-      *   Test that if `disable_legacy_gift_handling` is `false`, the old actions ARE performed.
-  - [x] 7. **[Configuration]** Add settings in `settings.json` (e.g., under `FeatureFlags` or `HandleGiftedSubscriptionEventActions`):
-      *   `SendThankYouChatMessage: true/false`
-      *   `AwardPointsToGifter: true/false`
-      *   `PointsToGifterPerSub: <number>`
-      *   `AwardPointsToRecipients: true/false`
-      *   `PointsToRecipient: <number>`
-      *   The existing `GiftBlokitos` setting might need review/integration.
-      *   Update `KickWebhookHandler.handle_gifted_subscription_event` to check these.
-  - [x] 8. **[Documentation]** Document new configuration flags and gifted subscription event actions.
-
-## User Story 6.4: Implement Subscription Renewal Event Actions in New System (Optional)
-As a Sr_Botoshi operator,
-I want the bot to perform defined actions (e.g., send a thank you message for X months) when a `channel.subscription.renewal` event is received via webhook,
-So that renewing subscribers are acknowledged by the new event system.
-
-**Legacy Mechanism:**
-*   No known legacy handling for specific subscription renewal events. This is entirely new functionality.
-
-**Given-When-Then (Behavior):**
-  Given the `EnableNewWebhookEventSystem` feature flag is `true`.
-  And the bot is subscribed to `channel.subscription.renewal` events.
-  And the bot receives a valid `channel.subscription.renewal` webhook event.
-  When the corresponding handler `KickWebhookHandler.handle_subscription_renewal_event` processes the event.
-  Then it should [Action 1: Log the renewal details].
-  And Then it should [Action 2: If configured, send a chat message: "Thanks {username} for renewing your Tier {tier_level} sub for {cumulative_months} months!"].
-  And Then it should [Action 3: If a points system exists and configured, award points, possibly scaled by renewal duration or tier].
-
-**TDD Tasks:**
-  - [x] 1. **[Development]** In `settings.json`, add `{"name": "channel.subscription.renewal", "version": 1}` to `KickEventsToSubscribe`.
-  - [x] 2. **[Development]** In `kickbot/event_models.py`:
-      *   [x] Create Pydantic models `SubscriptionRenewalEventData` and `SubscriptionRenewalEvent` matching the `channel.subscription.renewal` payload from Kick docs (fields likely include `subscriber`, `tier`, `months_subscribed` (cumulative), `created_at`, `expires_at`).
-      *   [x] Add `SubscriptionRenewalEvent` to the `AnyKickEvent` Union and `parse_kick_event_payload`.
-  - [x] 3. **[Development]** In `KickWebhookHandler`:
-      *   [x] Create a new method `async def handle_subscription_renewal_event(self, event: SubscriptionRenewalEvent):`.
-      *   [x] Register this handler in `__init__`: `self.register_event_handler("channel.subscription.renewal", self.handle_subscription_renewal_event)`.
-      *   [x] Implement logic for sending chat messages (using `self.bot`) and (Future) awarding points.
-      *   [x] All new actions must be within the `if self.enable_new_webhook_system:` block.
-  - [x] 4. **[Test]** Write unit tests for `KickWebhookHandler.handle_subscription_renewal_event` in `tests/test_kick_webhook_handler.py`:
-      *   [x] Mock `self.bot.send_text` and points system calls.
-      *   [x] Test actions are performed if `enable_new_webhook_system` is `true` and specific action flags are enabled.
-      *   [x] Test correct message content based on event data (username, tier, duration).
-      *   [x] Test that actions are not performed if `enable_new_webhook_system` is `false`.
-  - [x] 5. **[Configuration]** Add settings in `settings.json` (e.g., under `FeatureFlags` or `HandleSubscriptionRenewalEventActions`):
-      *   [x] `SendChatMessage: true/false`
-      *   [x] `AwardPoints: true/false`
-      *   [x] `PointsToAward: <number>`
-      *   Update `KickWebhookHandler.handle_subscription_renewal_event` to check these.
-  - [x] 6. **[Documentation]** Document new event, Pydantic models, configuration flags, and renewal event actions.
-
----
-
-This plan should provide a good roadmap. The most critical initial step will be figuring out the precise OAuth flow for Kick's App Access Tokens. 
+      *   Ensure it uses `self.bot`

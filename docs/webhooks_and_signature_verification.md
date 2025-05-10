@@ -13,6 +13,7 @@ Sr_Botoshi now supports receiving webhooks from Kick.com via the official API, w
 - [Signature Verification](#signature-verification)
 - [Example Usage (Conceptual)](#example-usage-conceptual)
 - [Troubleshooting](#troubleshooting)
+- [Operating the New Webhook Event System (Phased Rollout & Troubleshooting)](#operating-the-new-webhook-event-system-phased-rollout-and-troubleshooting)
 
 ## Overview
 
@@ -100,7 +101,38 @@ This will enable the `KickWebhookHandler` to parse the new event type using your
 
 ### Configuring Specific Event Actions
 
-Beyond just parsing and logging, Sr_Botoshi allows for specific actions to be configured for certain events. These configurations are typically found in your `settings.json` file and are used in conjunction with the main `EnableNewWebhookEventSystem` feature flag.
+Beyond just parsing and logging, Sr_Botoshi allows for specific actions to be configured for certain events. These configurations are typically found in your `settings.json` file.
+
+**Master Control for New Webhook Actions:**
+
+All actions triggered by the new webhook event system (follow, new subscription, gifted subscription, renewal) are globally controlled by the `EnableNewWebhookEventSystem` feature flag in `settings.json` under the `FeatureFlags` object:
+
+```json
+{
+  // ... other settings ...
+  "FeatureFlags": {
+    "EnableNewWebhookEventSystem": true, // Master switch for all new webhook actions
+    "DisableLegacyGiftEventHandling": false 
+    // ... other flags ...
+  },
+  // ... other settings ...
+}
+```
+
+-   **`EnableNewWebhookEventSystem`** (boolean):
+    -   If `true`, the new webhook-based event handlers in `KickWebhookHandler` will process incoming events and attempt to perform actions based on their specific configurations (detailed below).
+    -   If `false`, all event-specific actions described in the following sections (chat messages, point logging, etc.) for the new webhook system will be skipped, regardless of their individual settings. The webhook server will still receive events if `KickWebhookEnabled` is true, but the handlers will not perform their primary actions.
+    -   Defaults to `true` if the key or `FeatureFlags` object is missing.
+
+-   **`DisableLegacyGiftEventHandling`** (boolean):
+    -   This flag is intended to disable any old, chat-based or WebSocket-based logic for handling gifted subscriptions if such logic were active and conflicting with the new webhook system.
+    -   Current analysis indicates no active legacy system for processing gifted subscription events that would be gated by this flag. The old WebSocket event `gifted_subscriptions` had a `pass` statement, and no specific chat parsing for gifts has been identified.
+    -   This flag remains for future-proofing or if an overlooked legacy path is discovered. It currently has no direct effect on disabling known legacy code.
+    -   Defaults to `false` if the key is missing.
+
+**Individual Event Action Configurations:**
+
+The following sections describe configurations for actions related to specific events. **These actions are only performed if `EnableNewWebhookEventSystem` is `true`.**
 
 **Example: Follow Event Actions**
 
@@ -113,7 +145,7 @@ This is controlled by the `HandleFollowEventActions` object in `settings.json`:
   // ... other settings ...
   "FeatureFlags": {
     "EnableNewWebhookEventSystem": true,
-    // ... other flags ...
+    "DisableLegacyGiftEventHandling": false
   },
   "HandleFollowEventActions": {
     "SendChatMessage": true
@@ -124,29 +156,31 @@ This is controlled by the `HandleFollowEventActions` object in `settings.json`:
 
 -   **`HandleFollowEventActions`**: This object contains settings specific to actions for follow events.
     -   **`SendChatMessage`** (boolean): 
-        -   If `true`, and `FeatureFlags.EnableNewWebhookEventSystem` is also `true`, the bot will attempt to send a chat message like "Thanks for following, {username}!" when a new follow event is processed.
-        -   If `false`, no chat message will be sent for new follows, even if the new webhook system is enabled.
-        -   If this setting or the `HandleFollowEventActions` object is entirely missing from `settings.json`, `SendChatMessage` defaults to `true` (meaning the bot will try to send the message if the new webhook system is on).
+        -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is also `true`), the bot will attempt to send a chat message like "Thanks for following, {username}!" when a new follow event is processed.
+        -   If `false`, no chat message will be sent for new follows, even if `EnableNewWebhookEventSystem` is `true`.
+        -   If this setting or the `HandleFollowEventActions` object is entirely missing from `settings.json`, `SendChatMessage` defaults to `true`.
 
-To disable the follow thank you message, you would set `SendChatMessage` to `false`:
+To disable the follow thank you message (while `EnableNewWebhookEventSystem` is true):
 ```json
+{
   "HandleFollowEventActions": {
     "SendChatMessage": false
   }
+}
 ```
 
 **Example: New Subscription Event Actions**
 
 When a `channel.subscription.new` event (a new, non-gifted subscription) is received, you can configure Sr_Botoshi to perform specific actions like sending a thank you message and (in the future) awarding points.
 
-This is controlled by the `HandleSubscriptionEventActions` object in `settings.json`:
+This is controlled by the `HandleSubscriptionEventActions` object in `settings.json`. **These actions only occur if `FeatureFlags.EnableNewWebhookEventSystem` is `true`.**
 
 ```json
 {
   // ... other settings ...
   "FeatureFlags": {
     "EnableNewWebhookEventSystem": true,
-    // ... other flags ...
+    "DisableLegacyGiftEventHandling": false
   },
   "HandleSubscriptionEventActions": {
     "SendChatMessage": true,
@@ -166,35 +200,28 @@ This is controlled by the `HandleSubscriptionEventActions` object in `settings.j
         -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will attempt to award points to the subscriber. (Currently, this logs a placeholder message; actual point awarding is a future implementation.)
         -   If `false`, no points will be awarded (or logged for awarding).
         -   Defaults to `true` if the key is missing.
-    -   **`PointsToAward`** (integer):
-        -   Specifies the number of points to award if `AwardPoints` is `true`.
-        -   Defaults to `100` if the key is missing.
 
-To disable chat messages for new subscriptions but keep point awarding (once fully implemented):
+To disable chat messages for new subscriptions but keep point awarding (once fully implemented), assuming `EnableNewWebhookEventSystem` is true:
 ```json
+{
   "HandleSubscriptionEventActions": {
     "SendChatMessage": false,
     "AwardPoints": true,
     "PointsToAward": 150
   }
+}
 ```
 
 **Example: Gifted Subscription Event Actions**
 
-When a `channel.subscription.gifts` event (gifted subscriptions) is received, Sr_Botoshi can perform several actions:
-
-- Send a thank you message in chat.
-- Award points to the gifter.
-- Award points to the recipients.
-
-These actions are controlled by the `HandleGiftedSubscriptionEventActions` object in `settings.json`:
+When a `channel.subscription.gifts` event (gifted subscriptions) is received, Sr_Botoshi can perform several actions. These are controlled by the `HandleGiftedSubscriptionEventActions` object in `settings.json` and **only occur if `FeatureFlags.EnableNewWebhookEventSystem` is `true`.**
 
 ```json
 {
   // ... other settings ...
   "FeatureFlags": {
     "EnableNewWebhookEventSystem": true,
-    "DisableLegacyGiftEventHandling": false // If true, any old gift processing is skipped
+    "DisableLegacyGiftEventHandling": false
   },
   "HandleGiftedSubscriptionEventActions": {
     "SendThankYouChatMessage": true,
@@ -212,32 +239,30 @@ These actions are controlled by the `HandleGiftedSubscriptionEventActions` objec
         -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will send a chat message thanking the gifter and acknowledging the recipients.
         -   Defaults to `true`.
     -   **`AwardPointsToGifter`** (boolean):
-        -   If `true` (and system enabled, and gifter is not Anonymous), the bot will award points to the gifter.
+        -   If `true` (and `EnableNewWebhookEventSystem` is `true`, and gifter is not Anonymous), the bot will award points to the gifter.
         -   Defaults to `true`.
     -   **`PointsToGifterPerSub`** (integer):
         -   The number of points awarded to the gifter *for each sub gifted* if `AwardPointsToGifter` is `true`.
         -   Defaults to `50`.
     -   **`AwardPointsToRecipients`** (boolean):
-        -   If `true` (and system enabled), the bot will award points to each recipient of a gifted sub.
+        -   If `true` (and `EnableNewWebhookEventSystem` is `true`), the bot will award points to each recipient of a gifted sub.
         -   Defaults to `true`.
     -   **`PointsToRecipient`** (integer):
         -   The number of points awarded to each recipient if `AwardPointsToRecipients` is `true`.
         -   Defaults to `25`.
 
-*(Note: Point awarding is currently implemented as logging placeholders; actual database interaction for points is a future enhancement.)*
-
 **Example: Subscription Renewal Event Actions**
 
 When a `channel.subscription.renewal` event is received, Sr_Botoshi can perform actions like sending a congratulatory message and awarding points for continued support.
 
-This is controlled by the `HandleSubscriptionRenewalEventActions` object in `settings.json`:
+This is controlled by the `HandleSubscriptionRenewalEventActions` object in `settings.json` and **only occur if `FeatureFlags.EnableNewWebhookEventSystem` is `true`.**
 
 ```json
 {
   // ... other settings ...
   "FeatureFlags": {
     "EnableNewWebhookEventSystem": true,
-    // ... other flags ...
+    "DisableLegacyGiftEventHandling": false
   },
   "HandleSubscriptionRenewalEventActions": {
     "SendChatMessage": true,
@@ -253,13 +278,84 @@ This is controlled by the `HandleSubscriptionRenewalEventActions` object in `set
         -   If `true` (and `FeatureFlags.EnableNewWebhookEventSystem` is `true`), the bot will send a chat message like "Thanks {username} for renewing your Tier {tier} sub for {months_subscribed} months!".
         -   Defaults to `true`.
     -   **`AwardPoints`** (boolean):
-        -   If `true` (and system enabled), the bot will (currently log) awarding points to the renewing subscriber.
+        -   If `true` (and `EnableNewWebhookEventSystem` is `true`), the bot will (currently log) awarding points to the renewing subscriber.
         -   Defaults to `true`.
-    -   **`PointsToAward`** (integer):
-        -   The number of points to award if `AwardPoints` is `true`.
-        -   Defaults to `100` (example value 120 used in snippet above for illustration, actual default in code is 100, and an example in `settings.json` uses 120).
 
-As more event-specific actions are added, their configurations will be documented here and will typically reside in `settings.json` under similar dedicated objects.
+As more event-specific actions are added, their configurations will be documented here and will typically reside in `settings.json` under similar dedicated objects, all contingent on `EnableNewWebhookEventSystem` being active.
+
+## Operating the New Webhook Event System (Phased Rollout & Troubleshooting)
+
+The new webhook event system is designed for flexibility, allowing you to enable or disable its functionality globally or for specific actions. This is useful for phased rollouts, testing, or troubleshooting.
+
+**Key Configuration File:** `settings.json`
+
+**1. Global Control (Master Switch):**
+
+   - **Flag:** `FeatureFlags.EnableNewWebhookEventSystem` (boolean)
+   - **Purpose:** This is the primary switch for the entire new webhook-based event action system.
+   - **Behavior:**
+     - `true`: The `KickWebhookHandler` will process incoming webhook events (follows, new subscriptions, gifted subscriptions, renewals) and attempt to perform actions based on the specific configurations detailed in the sections above (e.g., sending chat messages, logging point awards).
+     - `false`: All event-specific actions performed by the `KickWebhookHandler` will be skipped. The webhook server might still receive events from Kick (if `KickWebhookEnabled` is also true in `settings.json`), but no automated actions like chat messages or point awards will be triggered by the new system.
+   - **Default:** `true` (if the flag or `FeatureFlags` object is missing).
+   - **Use Cases:**
+     - **Full Rollout:** Set to `true` for normal operation.
+     - **Temporarily Disable All New Actions:** Set to `false` if you suspect an issue with the new webhook system and want to quickly revert to only legacy behaviors (if any) or stop all webhook-driven actions.
+     - **Testing:** Can be toggled to observe behavior with and without the new system active.
+
+**2. Fine-Grained Control (Per-Event, Per-Action):**
+
+   - **Flags:** Located within specific objects like `HandleFollowEventActions`, `HandleSubscriptionEventActions`, `HandleGiftedSubscriptionEventActions`, and `HandleSubscriptionRenewalEventActions`.
+   - **Purpose:** These allow you to enable or disable individual actions (e.g., sending a chat message for a new follow, awarding points for a new sub) *while the global `EnableNewWebhookEventSystem` is `true`*.
+   - **Behavior:** For an action to occur:
+     1. `EnableNewWebhookEventSystem` must be `true`.
+     2. The relevant specific action flag (e.g., `HandleFollowEventActions.SendChatMessage`) must also be `true` (or default to `true` if not specified).
+   - **Examples:**
+     - To stop sending chat messages for new follows but keep other webhook actions active:
+       ```json
+       "FeatureFlags": {
+         "EnableNewWebhookEventSystem": true 
+       },
+       "HandleFollowEventActions": {
+         "SendChatMessage": false 
+       }
+       ```
+     - To disable awarding points for new subscriptions but still send the chat message (assuming `EnableNewWebhookEventSystem` is `true`):
+       ```json
+       "HandleSubscriptionEventActions": {
+         "SendChatMessage": true,
+         "AwardPoints": false,
+         "PointsToAward": 100 
+       }
+       ```
+   - **Use Cases:**
+     - **Phased Feature Introduction:** Enable a new action (e.g., awarding points for renewals) only after thorough testing, while other established actions remain active.
+     - **Troubleshooting Specific Actions:** If a particular action (e.g., the thank you message for gifted subs) is causing issues, you can disable just that action without turning off the entire webhook system or other event handlers.
+
+**3. Legacy System Interaction:**
+
+   - **Flag:** `FeatureFlags.DisableLegacyGiftEventHandling` (boolean)
+   - **Purpose:** This flag was intended to gate any old system logic for handling gifted subscriptions if it conflicted with the new webhook system.
+   - **Current Status:** As detailed earlier, no active conflicting legacy gift processing has been identified in the current codebase. Thus, this flag currently has minimal direct effect. It defaults to `false`.
+   - **Recommendation:** Generally, this can be left as `false` unless a specific legacy conflict related to gifts is identified.
+
+**Troubleshooting Steps with Flags:**
+
+1.  **Problem: No webhook actions are occurring.**
+    *   Verify `KickWebhookEnabled` is `true` in `settings.json` (this enables the webhook server itself).
+    *   Verify `EnableNewWebhookEventSystem` is `true` in `FeatureFlags`.
+    *   Check bot logs for errors during webhook handler initialization or event processing.
+    *   Ensure the specific action flag (e.g., `HandleFollowEventActions.SendChatMessage`) is `true` or not present (to use its default `true` value).
+
+2.  **Problem: A specific webhook action is not occurring (e.g., no chat message for new subs, but follows work).**
+    *   Ensure `EnableNewWebhookEventSystem` is `true`.
+    *   Check the relevant `Handle...EventActions` object (e.g., `HandleSubscriptionEventActions`) and ensure the specific action key (e.g., `SendChatMessage`) is `true`.
+    *   Review bot logs for errors specific to that event handler.
+
+3.  **Problem: Suspected conflict or undesired behavior from a new webhook action.**
+    *   To quickly isolate, set the specific action flag to `false` (e.g., `HandleGiftedSubscriptionEventActions.SendThankYouChatMessage: false`).
+    *   If the issue is broader or affects multiple new actions, consider setting `EnableNewWebhookEventSystem` to `false` temporarily while investigating.
+
+By using these flags, you can manage the rollout and operation of the new webhook event system effectively.
 
 ## Signature Verification
 
