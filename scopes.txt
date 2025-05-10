@@ -1,0 +1,11 @@
+[2025-05-10 13:15:46,069] [kickbot.kick_bot] [INFO    ] - WebSocket connection established (pusher:connection_established event).
+2025-05-10 13:15:46,170 - INFO - Received unhandled WebSocket event type: pusher_internal:subscription_succeeded
+2025-05-10 01:15.46 PM - INFO - Received unhandled WebSocket event type: pusher_internal:subscription_succeeded
+[2025-05-10 13:15:46,170] [kickbot.kick_bot] [INFO    ] - Received unhandled WebSocket event type: pusher_internal:subscription_succeeded
+[2025-05-10 13:16:28,903] [aiohttp.access] [INFO    ] - 172.21.0.1 [10/May/2025:13:16:28 +0000] "GET /callback HTTP/1.1" 404 194 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+[2025-05-10 13:16:36,481] [aiohttp.access] [INFO    ] - 172.21.0.1 [10/May/2025:13:16:36 +0000] "GET / HTTP/1.1" 404 194 "-" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
+[2025-05-10 13:43:49,721] [aiohttp.access] [INFO    ] - 172.21.0.1 [10/May/2025:13:43:49 +0000] "POST / HTTP/1.1" 404 194 "-" "Go-http-client/2.0"
+[2025-05-10 13:43:49,990] [aiohttp.access] [INFO    ] - 172.21.0.1 [10/May/2025:13:43:49 +0000] "POST / HTTP/1.1" 404 194 "-" "Go-http-client/2.0"
+2025-05-10 13:43:53,314 - INFO - Received unhandled WebSocket event type: App\Events\ChatMessageSentEvent
+2025-05-10 01:43.53 PM - INFO - Received unhandled WebSocket event type: App\Events\ChatMessageSentEvent
+[2025-05-10 13:43:53,314] [kickbot.kick_bot] [INFO    ] - Received unhandled WebSocket event type: App\Events\ChatMessageSentEvent

@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  botoshi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kickbot_botoshi
+    # Mount the current directory on the host to /app in the container
+    # This allows local code changes to be reflected immediately in the container,
+    # and ensures files like settings.json, tokens, and .db files are used from the host.
+    volumes:
+      - .:/app
+    
+    # Load environment variables from the .env file in the project directory
+    env_file:
+      - .env
+      
+    ports:
+      - "5009:8080" # Host:Container
+      
+    # Keep stdin open and allocate a TTY
+    # This is essential for attaching to the container or using 'docker exec' with an interactive shell.
+    stdin_open: true
+    tty: true 

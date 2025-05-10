@@ -41,18 +41,30 @@ logger = logging.getLogger(__name__)
 with open('settings.json') as f:
     settings = json.load(f)
 
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
 class KickBot:
     """
     Main class for interacting with the Bot API.
     """
     def __init__(self, username: str, password: str) -> None:
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        # Avoid adding handler if already present (e.g. during tests with multiple instances or re-init)
-        if not any(isinstance(h, logging.StreamHandler) for h in self.logger.handlers):
+        self.logger.setLevel(logging.DEBUG)  # FORCE DEBUG LEVEL FOR THIS LOGGER INSTANCE
+        
+        # Ensure there's a handler that can output DEBUG messages
+        # This might add a duplicate handler if basicConfig is also working, 
+        # but for diagnostics, seeing the message is key.
+        if not self.logger.handlers or not any(h.level <= logging.DEBUG for h in self.logger.handlers):
+            # Remove existing handlers if they might be filtering out DEBUG
+            for handler in self.logger.handlers[:]:
+                self.logger.removeHandler(handler)
+            
+            handler = logging.StreamHandler() # Outputs to stderr by default
+            handler.setLevel(logging.DEBUG) # Handler must also be at DEBUG
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
             self.logger.addHandler(handler)
+            self.logger.propagate = False # Avoid duplicate messages from root logger if it also has handlers
 
         # HTTP Session for all aiohttp requests - to be initialized in run()
         self.http_session: Optional[aiohttp.ClientSession] = None
@@ -620,6 +632,19 @@ class KickBot:
             self.logger.warning(f"Skipping reply to avoid breaking: {reply_message!r}")
             return
 
+        # Check if sender exists and has a username, to avoid AttributeError
+        if not hasattr(original_message, 'sender') or original_message.sender is None:
+            logger.error(f"Cannot reply: Original message has no sender. Message: {original_message}")
+            raise KickBotException(f"Cannot reply: Original message has no sender")
+            
+        if not hasattr(original_message.sender, 'user_id') or original_message.sender.user_id is None:
+            logger.error(f"Cannot reply: Sender has no user_id. Sender: {original_message.sender}")
+            raise KickBotException(f"Cannot reply: Sender has no user_id")
+            
+        if not hasattr(original_message.sender, 'username') or original_message.sender.username is None:
+            logger.error(f"Cannot reply: Sender has no username. Sender: {original_message.sender}")
+            raise KickBotException(f"Cannot reply: Sender has no username")
+
         logger.debug(f"Sending reply: {reply_message!r}")
         try:
             r = send_reply_in_chat(self, original_message, reply_message)
@@ -741,49 +766,84 @@ class KickBot:
             self.ws_connection = websocket
             self.logger.info(f"Connected to {self.streamer_name}'s chat via WebSocket.")
             await self._join_chatroom(self.chatroom_id)
+            self.logger.info(f"Attempted to join chatroom ID: {self.chatroom_id}") # Log chatroom join attempt
 
             while self._is_active:
                 try:
-                    message = await asyncio.wait_for(self._recv(), timeout=1.0)
-                    if message:
-                        event_type = message.get("event")
-                        data = message.get("data")
+                    # message is now potentially None if _recv failed, renamed to avoid confusion with outer scope message
+                    received_message_data = await asyncio.wait_for(self._recv(), timeout=1.0)
+                    
+                    if received_message_data is None: # If _recv returned None (e.g. on error or clean close)
+                        if not self._is_active: # If _is_active was set to False in _recv
+                            self.logger.info("Exiting poll loop as _is_active is False (likely due to _recv error/close).")
+                            break # Exit the while loop
+                        continue # Otherwise, continue to next iteration (e.g. if only JSON decode failed but connection is alive)
 
-                        if data and isinstance(data, str):
-                            try:
-                                data = json.loads(data)
-                            except json.JSONDecodeError:
-                                self.logger.warning(f"Could not decode JSON data: {data}")
-                                continue
+                    # Process the successfully received and parsed message data
+                    event_type = received_message_data.get("event")
+                    data = received_message_data.get("data")
 
-                        if event_type == "App\\Events\\SocketMessageEvent":
-                            self.logger.debug(f"Received SocketMessageEvent: {message}")
-                            if data:
-                                if isinstance(data, str):
-                                    try:
-                                        inner_data = json.loads(data)
-                                    except json.JSONDecodeError:
-                                        self.logger.error(f"Failed to parse inner JSON data from SocketMessageEvent: {data}")
-                                else:
-                                    inner_data = data
+                    # This data is now the Python dict from json.loads in _recv, or from direct assignment if not string initially.
+                    # The initial string check and json.loads for 'data' at this level can be simplified or removed
+                    # if _recv guarantees 'data' (when part of received_message_data) is already loaded from JSON string, 
+                    # or is the original non-string data.
+                    # For now, keeping the existing structure for data handling, but it might need review based on _recv's behavior.
 
-                                if inner_data:
-                                    if inner_data.get('type') == 'message':
-                                        await self._handle_chat_message(inner_data)
-                                    elif inner_data.get('type') == 'App\\Events\\FollowEvent':
-                                        pass
-                                    elif inner_data.get('type') == 'gifted_subscriptions':
-                                        pass
-                        elif event_type == "pusher:connection_established":
-                            await self._handle_first_connect(message)
-                        elif event_type == "App\\Events\\UserBannedEvent":
-                            if data:
-                                await self._handle_ban(data)
+                    if data and isinstance(data, str): # This check might be redundant if _recv always parses JSON strings
+                        try:
+                            data = json.loads(data) # This might attempt to double-parse if _recv already did.
+                        except json.JSONDecodeError:
+                            self.logger.warning(f"Could not decode JSON from 'data' field: {data}")
+                            continue
+
+                    if event_type == "App\\Events\\SocketMessageEvent":
+                        self.logger.debug(f"Received SocketMessageEvent: {received_message_data}")
+                        if data:
+                            # For SocketMessageEvent, 'data' field can itself be a JSON string.
+                            # This needs careful handling if the outer 'data' was already parsed.
+                            # Assuming 'inner_data' is the actual payload here.
+                            inner_data_payload = data # Start with data as is.
+                            if isinstance(data, str):
+                                try:
+                                    inner_data_payload = json.loads(data)
+                                except json.JSONDecodeError:
+                                    self.logger.error(f"Failed to parse inner JSON data from SocketMessageEvent: {data}")
+                                    continue # Skip this message
+                            
+                            if inner_data_payload:
+                                if inner_data_payload.get('type') == 'message':
+                                    await self._handle_chat_message(inner_data_payload)
+                                elif inner_data_payload.get('type') == 'App\\Events\\FollowEvent':
+                                    # Placeholder for handling FollowEvent if it comes via SocketMessageEvent
+                                    self.logger.debug(f"FollowEvent received via SocketMessageEvent: {inner_data_payload}")
+                                    pass
+                                elif inner_data_payload.get('type') == 'gifted_subscriptions':
+                                    # Placeholder for handling gifted_subscriptions if it comes via SocketMessageEvent
+                                    self.logger.debug(f"GiftedSubscriptions event received via SocketMessageEvent: {inner_data_payload}")
+                                    pass
+                    elif event_type == "App\\Events\\ChatMessageSentEvent": 
+                        self.logger.debug(f"Received ChatMessageSentEvent: {received_message_data}")
+                        # Expect 'data' to be a dict here, as parsed by _recv or passed directly if not string.
+                        if data and isinstance(data, dict):
+                            await self._handle_chat_message(data)
                         else:
-                            self.logger.info(f"Received unhandled WebSocket event type: {event_type}")
-                            self.logger.debug(f"Full unhandled message: {message}")
+                            self.logger.warning(f"Received ChatMessageSentEvent with invalid or non-dict data: {data}")
+                    elif event_type == "pusher:connection_established":
+                        await self._handle_first_connect(received_message_data)
+                    elif event_type == "App\\Events\\UserBannedEvent":
+                        if data:
+                            await self._handle_ban(data)
+                    elif event_type == "pusher_internal:subscription_succeeded":
+                        self.logger.debug(f"Full pusher_internal:subscription_succeeded event: {received_message_data}")
+                        # Get channel from the top-level of the event, not from its 'data' field.
+                        actual_subscribed_channel = received_message_data.get('channel')
+                        self.logger.info(f"Successfully subscribed to Pusher channel: {actual_subscribed_channel}")
+                    else:
+                        self.logger.info(f"Received unhandled WebSocket event type: {event_type}")
+                        self.logger.debug(f"Full unhandled message: {received_message_data}")
 
                 except asyncio.TimeoutError:
+                    self.logger.debug("WebSocket receive timed out. No message in 1s.") # More visible log
                     continue
                 except websockets.exceptions.ConnectionClosedError as e:
                     self.logger.error(f"WebSocket connection closed unexpectedly: {e}. Attempting to reconnect...")
@@ -841,13 +901,33 @@ class KickBot:
         """
         await self.sock.send(json.dumps(command))
 
-    async def _recv(self) -> dict:
+    async def _recv(self) -> Optional[dict]:
         """
-        Json loads command received from socket.
-
-        :return: dict / json inbound socket command
+        Receives raw data, logs it, then tries to parse as JSON.
+        Returns None if connection closes, JSON parsing fails, or other critical error.
         """
-        return json.loads(await self.ws_connection.recv())
+        raw_data = None # Initialize raw_data to ensure it's available for logging in case of early errors
+        try:
+            raw_data = await self.ws_connection.recv()
+            self.logger.debug(f"Raw WebSocket data received: {raw_data}")
+            return json.loads(raw_data)
+        except websockets.exceptions.ConnectionClosedOK:
+            self.logger.info("WebSocket connection closed normally by remote.")
+            self._is_active = False # Stop polling if connection closed
+            return None
+        except websockets.exceptions.ConnectionClosedError as e:
+            self.logger.error(f"WebSocket connection closed with error: {e}")
+            self._is_active = False # Stop polling
+            return None
+        except json.JSONDecodeError as e:
+            # Ensure raw_data is a string or can be represented as a string for the log message
+            raw_data_str = raw_data if isinstance(raw_data, str) else str(raw_data)
+            self.logger.error(f"Failed to decode JSON from WebSocket: {raw_data_str}. Error: {e}")
+            return None
+        except Exception as e:
+            self.logger.error(f"Unexpected error in _recv: {e}", exc_info=True)
+            self._is_active = False # Stop polling on unexpected errors
+            return None
 
     async def _handle_first_connect(self, message):
         """

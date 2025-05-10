@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 KICK_CLIENT_ID = os.environ.get("KICK_CLIENT_ID")
 KICK_CLIENT_SECRET = os.environ.get("KICK_CLIENT_SECRET")
 KICK_REDIRECT_URI = os.environ.get("KICK_REDIRECT_URI")
-KICK_SCOPES = os.environ.get("KICK_SCOPES", "chatroom:read user:read channel:read events:subscribe") # Expanded default scopes
+KICK_SCOPES = os.environ.get("KICK_SCOPES", "user:read channel:read chat:write events:subscribe") # Expanded default scopes
 
 # Default token file location
 DEFAULT_TOKEN_FILE = "kickbot_tokens.json"
@@ -217,8 +217,8 @@ class KickAuthManager:
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
             "client_id": self.client_id,
-            # "client_secret": self.client_secret, # Potentially required for confidential clients
-            "scope": self.scopes, # Often scopes are re-requested or re-asserted
+            "client_secret": self.client_secret, # Potentially required for confidential clients
+            "scope": " ".join(self.scopes), # Often scopes are re-requested or re-asserted
         }
         
         # Create a session

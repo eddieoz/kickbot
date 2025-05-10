@@ -9,3 +9,4 @@ aiohttp
 pyngrok
 cryptography>=44.0.0
 python-dotenv
+pydantic
