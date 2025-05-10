@@ -15,7 +15,7 @@ from .kick_client import KickClient
 from .kick_message import KickMessage
 from .kick_moderator import Moderator
 from .kick_webhook_handler import KickWebhookHandler
-from .kick_auth_manager import KickAuthManager
+from .kick_auth_manager import KickAuthManager, DEFAULT_TOKEN_FILE
 from .kick_event_manager import KickEventManager
 from .kick_helper import (
     get_ws_uri,
@@ -78,7 +78,7 @@ class KickBot:
         self.moderator: Optional[Moderator] = None
         self.handled_commands: dict[str, Callable] = {}
         self.handled_messages: dict[str, Callable] = {}
-        self.timed_events: list[tuple[timedelta, Callable]] = []
+        self.timed_events: list[dict] = []
         self._is_active = True
 
         # Webhook Handler
@@ -87,7 +87,7 @@ class KickBot:
         self.webhook_site: Optional[web.TCPSite] = None
         self.webhook_enabled: bool = False
         self.webhook_path: str = "/kick/events"
-        self.webhook_port: int = 8080
+        self.webhook_port: int = 8081
 
         # Event Subscription Config
         self.kick_events_to_subscribe: List[Dict[str, Any]] = []
@@ -102,6 +102,11 @@ class KickBot:
         # Fill previously initialised variables with data from the settings.txt file
         # Settings(self) # Commented out: settings are applied via set_settings method
         # self.db = Database(self.chan) # Commented out: self.chan not set here; Markov DB init needs review
+
+        # Store credentials passed to __init__ if they are intended for the Kick client
+        # These are currently unused in favor of settings.json for KickClient credentials
+        self._init_username = username 
+        self._init_password = password
 
         # Set up daemon Timer to send help messages
         # if self.help_message_timer > 0: # Commented out: help_message_timer not set here
@@ -150,7 +155,7 @@ class KickBot:
         # Load Webhook settings
         self.webhook_enabled = settings.get("KickWebhookEnabled", False)
         self.webhook_path = settings.get("KickWebhookPath", "/kick/events")
-        self.webhook_port = settings.get("KickWebhookPort", 8080)
+        self.webhook_port = settings.get("KickWebhookPort", 8081)
 
         # Load Event Subscription settings
         raw_events = settings.get("KickEventsToSubscribe", [])
@@ -313,85 +318,125 @@ class KickBot:
                  asyncio.run(self.shutdown())
             self.logger.info("Bot stopped.")
 
+    async def _initialize_client_if_needed(self):
+        # This method now assumes self.http_session is already set if called from run()
+        if not self.client:
+            kick_email = settings.get("KickEmail")
+            kick_pass = settings.get("KickPass")
+            if not kick_email or not kick_pass:
+                self.logger.error("Kick email or password not found in settings.json. Cannot initialize KickClient.")
+                raise KickBotException("Kick credentials not found in settings.") # Raise to halt
+            
+            if not self.http_session:
+                self.logger.error("aiohttp.ClientSession not available. Cannot initialize KickClient.")
+                raise KickBotException("aiohttp.ClientSession not initialized before KickClient.") # Raise to halt
+
+            self.client = KickClient(kick_email, kick_pass, aiohttp_session=self.http_session)
+            self.logger.info("KickClient initialized.")
+        
+        if not self.auth_manager:
+            # Always use the default token file as specified by the user.
+            token_file_name = DEFAULT_TOKEN_FILE # from kick_auth_manager.py
+            self.auth_manager = KickAuthManager(token_file=token_file_name)
+            self.logger.info(f"KickAuthManager initialized with token file: {token_file_name}")
+
     async def run(self):
         """Main async method to run bot components."""
-        self.http_session = aiohttp.ClientSession()
-        self.logger.info("aiohttp.ClientSession created.")
+        try:
+            async with aiohttp.ClientSession() as session:
+                self.http_session = session
+                self.logger.info("aiohttp.ClientSession created and active.")
 
-        # Initialize KickClient with the session
-        # Assuming KickBot's username and password are for KickClient
-        kick_email = settings.get("KickEmail") # Get from global settings loaded at module level
-        kick_pass = settings.get("KickPass")
-        if not kick_email or not kick_pass:
-            self.logger.error("KickEmail or KickPass not found in settings.json. Cannot initialize KickClient.")
-            await self.shutdown() # Or raise an exception
-            return
-        self.client = KickClient(kick_email, kick_pass, session=self.http_session)
+                # Initialize client and auth_manager first
+                await self._initialize_client_if_needed()
 
-        # Initialize KickAuthManager
-        # KickAuthManager loads its core OAuth parameters (client_id, client_secret, redirect_uri, scopes)
-        # directly from environment variables (e.g., populated by a .env file).
-        # No, it takes client and session as args, client_id etc are class attributes loaded from env by itself.
-        self.auth_manager = KickAuthManager(client=self.client, session=self.http_session)
-        self.logger.info("KickAuthManager initialized.")
+                # Ensure streamer_name is set before proceeding
+                if not self.streamer_name:
+                    self.logger.error("Streamer name not set. Call set_streamer() before run().")
+                    # Optionally, prompt for streamer name or load from a default if that's desired behavior.
+                    raise KickBotException("Streamer name not set.") # Critical to proceed
 
-        # Initialize and start Webhook server if enabled by global and feature flag
-        if self.webhook_enabled and self.enable_new_webhook_system:
-            self.webhook_handler = KickWebhookHandler(
-                kick_bot_instance=self,  # Pass the KickBot instance
-                webhook_path=self.webhook_path,
-                port=self.webhook_port,
-                log_events=True, # Consider making this configurable
-                signature_verification=False, # TODO: Implement and make configurable
-                enable_new_webhook_system=self.enable_new_webhook_system,
-                disable_legacy_gift_handling=self.disable_legacy_gift_handling,
-                handle_follow_event_actions=self.handle_follow_event_actions, # Pass the new config
-                handle_subscription_event_actions=self.handle_subscription_event_actions,
-                handle_gifted_subscription_event_actions=self.handle_gifted_subscription_event_actions,
-                handle_subscription_renewal_event_actions=self.handle_subscription_renewal_event_actions # Pass renewal config
-            )
-            self.logger.info(f"KickWebhookHandler initialized. Path: {self.webhook_path}, Port: {self.webhook_port}")
-            await self._start_webhook_server() # This will set up runner and site
-        elif self.webhook_enabled and not self.enable_new_webhook_system:
-            self.logger.info("KickWebhookEnabled is true in settings, but EnableNewWebhookEventSystem feature flag is false. Webhook server will not start.")
-        else:
-            self.logger.info("KickWebhookEnabled is false in settings. Webhook server will not start.")
-
-
-        # Initialize Event Manager and subscribe to events if new system is enabled and streamer info is available
-        if self.enable_new_webhook_system and self.webhook_enabled: # Also depends on webhook being enabled
-            if self.streamer_info and 'id' in self.streamer_info:
-                broadcaster_id_val = self.streamer_info['id']
-                self.event_manager = KickEventManager(
-                    auth_manager=self.auth_manager, 
-                    client=self.client, # Pass the KickClient instance
-                    broadcaster_user_id=broadcaster_id_val 
-                )
-                self.logger.info(f"KickEventManager initialized for broadcaster ID: {broadcaster_id_val}.")
-                # Resubscribe to events
-                if self.kick_events_to_subscribe:
-                    self.logger.info(f"Attempting to subscribe to {len(self.kick_events_to_subscribe)} Kick event(s).")
-                    try:
-                        success = await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
-                        if success:
-                            self.logger.info("Successfully (re)subscribed to configured Kick events.")
-                        else:
-                            self.logger.warning("Failed to (re)subscribe to some or all configured Kick events.")
-                    except Exception as e:
-                        self.logger.error(f"Error during event resubscription: {e}", exc_info=True)
+                # Now that client is initialized, fetch streamer-specific info
+                if self.client: # Check if client was successfully initialized
+                    get_streamer_info(self) # Populates self.streamer_info, including id
+                    get_chatroom_settings(self)
+                    get_bot_settings(self)
+                    self.logger.info(f"Fetched initial info for streamer: {self.streamer_name}")
                 else:
-                    self.logger.info("No Kick events configured to subscribe to.")
-            else:
-                self.logger.warning("Streamer info (especially ID) not available. Cannot initialize KickEventManager or subscribe to events.")
-        else:
-            if not self.enable_new_webhook_system:
-                self.logger.info("EnableNewWebhookEventSystem feature flag is false. KickEventManager will not be initialized, and events will not be subscribed.")
-            elif not self.webhook_enabled:
-                 self.logger.info("KickWebhookEnabled is false. KickEventManager will not be initialized, and events will not be subscribed.")
+                    # This case should be caught by exceptions in _initialize_client_if_needed
+                    self.logger.error("KickClient not available after initialization attempt. Cannot fetch streamer info.")
+                    raise KickBotException("KickClient failed to initialize.")
 
+                # Initialize Event Manager and subscribe to events if new system is enabled and streamer info is available
+                if self.enable_new_webhook_system and self.webhook_enabled:
+                    if self.streamer_info and self.streamer_info.get('id') and self.auth_manager and self.client:
+                        broadcaster_id_val = self.streamer_info['id']
+                        if not self.event_manager: # Initialize only if not already done
+                            self.event_manager = KickEventManager(
+                                auth_manager=self.auth_manager,
+                                client=self.client,
+                                broadcaster_user_id=broadcaster_id_val
+                            )
+                            self.logger.info(f"KickEventManager initialized for broadcaster ID: {broadcaster_id_val}.")
+                            
+                            if self.kick_events_to_subscribe:
+                                self.logger.info(f"Attempting to subscribe to {len(self.kick_events_to_subscribe)} Kick event(s). GHG")
+                                try:
+                                    success = await self.event_manager.resubscribe_to_configured_events(self.kick_events_to_subscribe)
+                                    if success:
+                                        self.logger.info("Successfully (re)subscribed to configured Kick events. GHG")
+                                    else:
+                                        self.logger.warning("Failed to (re)subscribe to some or all configured Kick events. GHG")
+                                except Exception as e:
+                                    self.logger.error(f"Error during event resubscription: {e}", exc_info=True)
+                            else:
+                                self.logger.info("No Kick events configured to subscribe to.")
+                    else:
+                        missing_deps = []
+                        if not (self.streamer_info and self.streamer_info.get('id')): missing_deps.append("streamer_info.id")
+                        if not self.auth_manager: missing_deps.append("auth_manager")
+                        if not self.client: missing_deps.append("client")
+                        self.logger.warning(f"Cannot initialize KickEventManager or subscribe to events. Missing dependencies: {', '.join(missing_deps)}.")
+                else:
+                    if not self.enable_new_webhook_system:
+                        self.logger.info("EnableNewWebhookEventSystem feature flag is false. KickEventManager will not be initialized.")
+                    elif not self.webhook_enabled:
+                        self.logger.info("KickWebhookEnabled is false. KickEventManager will not be initialized.")
 
-        # Start polling for chat messages (traditional method)
-        await self._poll()
+                # Initialize and start Webhook server (moved after EventManager setup that might use auth_manager)
+                if self.webhook_enabled and self.enable_new_webhook_system:
+                    # WebhookHandler might also need auth_manager or client depending on its internal logic for event processing
+                    # Ensure it's initialized here if it has such dependencies, or ensure it gets them correctly.
+                    # For now, assuming its current init in _start_webhook_server is sufficient if called at the right time.
+                    await self._start_webhook_server() 
+                elif self.webhook_enabled and not self.enable_new_webhook_system:
+                    self.logger.info("KickWebhookEnabled is true, but EnableNewWebhookEventSystem is false. Webhook server will not start.")
+                else:
+                    self.logger.info("KickWebhookEnabled is false. Webhook server will not start.")
+
+                # Start polling for chat messages (traditional method)
+                if self.client and self.chatroom_id: # Ensure client and chatroom_id are ready for polling
+                    await self._poll()
+                else:
+                    self.logger.error("Cannot start polling: KickClient not initialized or chatroom_id not found.")
+        
+        except KickBotException as e:
+            self.logger.critical(f"A critical KickBotException occurred during run: {e}", exc_info=True)
+            # Perform minimal cleanup if possible before exiting
+            if self.http_session and not self.http_session.closed:
+                await self.http_session.close()
+                self.logger.info("aiohttp.ClientSession closed due to critical error.")
+            # Depending on the severity, might want to call a more limited shutdown sequence
+        except Exception as e:
+            self.logger.critical(f"An unexpected critical error occurred during run: {e}", exc_info=True)
+            if self.http_session and not self.http_session.closed:
+                await self.http_session.close()
+                self.logger.info("aiohttp.ClientSession closed due to critical error.")
+        finally:
+            # This finally block might not be reached if run is awaited and exception propagates up to main loop
+            # Consider moving shutdown logic to the main poll() method's finally block or botoshi.py
+            self.logger.info("KickBot run method finished or exited due to error.")
+            # The self.shutdown() is called from poll() in botoshi.py's main structure
 
     async def shutdown(self):
         """Gracefully shutdown bot components."""
@@ -428,58 +473,44 @@ class KickBot:
 
         self.logger.info("Bot shutdown complete.")
 
-    def set_streamer(self, streamer_name: str) -> None:
+    async def set_streamer(self, streamer_name: str) -> None:
         """
         Set the streamer for the bot to monitor.
+        This method should be called BEFORE run().
 
         :param streamer_name: Username of the streamer for the bot to monitor
         """
-        if self.streamer_name is not None:
-            # If changing streamer, existing event subscriptions for old streamer should be cleared.
-            # This simple implementation doesn't handle streamer changes gracefully for event manager yet.
-            # For now, it assumes set_streamer is called once.
-            raise KickBotException("Streamer already set. Changing streamer during runtime is not fully supported for event subscriptions yet.")
+        if not streamer_name or not isinstance(streamer_name, str):
+            self.logger.error("Invalid streamer_name provided.")
+            raise KickBotException("Streamer name must be a non-empty string.")
+
+        if self.streamer_name is not None and self.streamer_name != streamer_name:
+            # Handling streamer changes mid-run can be complex with event subscriptions, tokens, etc.
+            # For now, disallow changing if already set to a different streamer to keep it simple.
+            # If it's the same streamer, it's a no-op.
+            self.logger.warning(f"Streamer is already set to {self.streamer_name}. Re-setting to {streamer_name}.")
+            # If re-setting to the same streamer, no actual change needed in streamer_name/slug here.
+            # Consider if any re-initialization logic is needed for this case.
         
         self.streamer_name = streamer_name
-        self.streamer_slug = streamer_name.replace('_', '-')
-        
-        # Ensure client is available for these helper calls if they use it
-        if not self.client:
-            # This is a problem if set_streamer is called before run() initializes self.client
-            # This indicates a potential design issue in initialization order.
-            # For now, log an error. A robust solution would ensure client is ready.
-            self.logger.error("KickClient not initialized when set_streamer was called. API calls in set_streamer might fail.")
-            # Ideally, `get_streamer_info` etc. should take the client as an argument or use one from `self`
-            # that is guaranteed to be initialized.
-        
-        get_streamer_info(self) # This populates self.streamer_info, including id
-        get_chatroom_settings(self)
-        get_bot_settings(self)
+        self.streamer_slug = streamer_name.replace('_', '-') # Ensure slug is always updated
+        self.logger.info(f"Streamer set to: {self.streamer_name} (slug: {self.streamer_slug})")
 
-        # Initialize EventManager here if all dependencies are met
-        # This makes more sense than in run(), as broadcaster_id is now known.
-        if self.streamer_info and self.streamer_info.get('id') and self.auth_manager and self.client:
-            if self.event_manager is None: # Initialize only once
-                self.event_manager = KickEventManager(
-                    auth_manager=self.auth_manager,
-                    client=self.client,
-                    broadcaster_user_id=self.streamer_info['id']
-                )
-                self.logger.info(f"KickEventManager initialized within set_streamer for broadcaster ID: {self.streamer_info['id']}.")
-                # Subscription logic will be handled in run() after token validation and webhook server start.
-            else:
-                 # If event_manager exists, and streamer_id changes, it needs re-initialization or update.
-                 # Current check for self.streamer_name prevents this path for now.
-                 pass 
-        elif not (self.auth_manager and self.client):
-            self.logger.warning("AuthManager or KickClient not ready during set_streamer. EventManager not initialized.")
+        # Defer client initialization and data fetching to the run() method
+        # as they depend on http_session and correct call order.
 
-        if self.is_mod:
-            self.moderator = Moderator(self)
-            logger.info(f"Bot is confirmed as a moderator for {self.streamer_name}...")
-        else:
-            logger.warning("Bot is not a moderator in the stream. To access moderator functions, make the bot a mod."
-                           "(You can still send messages and reply's, bot moderator status is recommended)")
+        # The following calls are MOVED to the run() method after client initialization:
+        # await self._initialize_client_if_needed() # MOVED
+        # get_streamer_info(self) # MOVED
+        # get_chatroom_settings(self) # MOVED
+        # get_bot_settings(self) # MOVED
+
+        # Moderator status check also depends on bot_settings, so it should also be in run() or called after it.
+        # if self.is_mod: 
+        #     self.moderator = Moderator(self)
+        #     logger.info(f"Bot is confirmed as a moderator for {self.streamer_name}...")
+        # else:
+        #     logger.warning("Bot is not a moderator...")
 
     def add_message_handler(self, message: str, message_function: Callable) -> None:
         """
@@ -526,7 +557,13 @@ class KickBot:
             raise KickBotException("Must set streamer name to monitor first.")
         if frequency_time.total_seconds() <= 0:
             raise KickBotException("Frequency time must be greater than 0.")
-        self.timed_events.append((frequency_time, timed_function))
+        # Create and store the asyncio task
+        task = asyncio.create_task(self._run_timed_event(frequency_time, timed_function))
+        self.timed_events.append({
+            "interval": frequency_time,
+            "func": timed_function,
+            "task": task
+        })
 
     def remove_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
@@ -541,7 +578,19 @@ class KickBot:
             raise KickBotException("Must set streamer name to monitor first.")
         if frequency_time.total_seconds() <= 0:
             raise KickBotException("Frequency time must be greater than 0.")
-        self.timed_events.remove((frequency_time, timed_function))
+        # Debug: log current timed_events and function IDs
+        self.logger.debug(f"Current timed_events: {[ (d['interval'], d['func'].__name__, id(d['func'])) for d in self.timed_events ]}")
+        self.logger.debug(f"Attempting to remove: ({frequency_time}, {timed_function.__name__}, id={id(timed_function)})")
+        removed = 0
+        for event in self.timed_events[:]:
+            if event["interval"] == frequency_time and event["func"] == timed_function:
+                event["task"].cancel()
+                self.timed_events.remove(event)
+                removed += 1
+        if removed == 0:
+            self.logger.warning(f"Tried to remove timed event ({timed_function.__name__}, {frequency_time}) but it was not in the list.")
+        else:
+            self.logger.info(f"Removed {removed} timed event(s) matching ({timed_function.__name__}, {frequency_time}).")
 
     async def send_text(self, message: str) -> None:
         """
@@ -685,10 +734,9 @@ class KickBot:
         if self.streamer_name is None:
             raise KickBotException("Must set streamer name to monitor first.")
 
-        timed_event_tasks = []
-        for time, func in self.timed_events:
-            timed_event_tasks.append(asyncio.create_task(self._run_timed_event(time, func)))
-        
+        # Timed event tasks are now managed in add_timed_event
+        timed_event_tasks = [event["task"] for event in self.timed_events]
+
         async with websockets.connect(self._ws_uri) as websocket:
             self.ws_connection = websocket
             self.logger.info(f"Connected to {self.streamer_name}'s chat via WebSocket.")
@@ -757,6 +805,18 @@ class KickBot:
         await asyncio.gather(*timed_event_tasks, return_exceptions=True)
         self.logger.info("Timed event tasks cancelled.")
 
+    async def _join_chatroom(self, chatroom_id):
+        """
+        Join the chatroom via websocket.
+        """
+        join_command = {
+            "event": "pusher:subscribe",
+            "data": {
+                "channel": f"chatrooms.{chatroom_id}"
+            }
+        }
+        await self.ws_connection.send(json.dumps(join_command))
+        
     async def _run_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
         Wrapper to run timed event. Loop will call the timed_function at specified frequency_time
@@ -787,4 +847,13 @@ class KickBot:
 
         :return: dict / json inbound socket command
         """
-        return json.loads(await self.sock.recv())
+        return json.loads(await self.ws_connection.recv())
+
+    async def _handle_first_connect(self, message):
+        """
+        Handle the 'pusher:connection_established' event from the websocket.
+        Currently a no-op.
+        """
+        self.logger.info("WebSocket connection established (pusher:connection_established event).")
+        # Optionally, parse the message or update state if needed.
+        pass

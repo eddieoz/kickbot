@@ -178,3 +178,10 @@ settings.json
 settings.json-working
 start-botoshi.sh
 .git-orig
+kickbot_tokens.json
+tmp.log
+botoshi.bat
+
+.cursor/rules/*.mdc
+.cursor/*
+.cursor/rules/

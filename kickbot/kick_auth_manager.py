@@ -7,7 +7,7 @@ import json
 import time
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Any
-from urllib.parse import urlencode # Already here, good
+from urllib.parse import urlencode, quote_plus # Already here, good
 import logging # ADDED
 
 # Configure logger for this module
@@ -51,14 +51,24 @@ class KickAuthManagerError(Exception):
 
 class KickAuthManager:
     def __init__(self, client_id: str = None, client_secret: str = None, redirect_uri: str = None, scopes: str = None, token_file: str = None):
+        self.logger = logging.getLogger(__name__) # Initialize logger for the class instance
         self.client_id = client_id or KICK_CLIENT_ID
         self.client_secret = client_secret or KICK_CLIENT_SECRET
         self.redirect_uri = redirect_uri or KICK_REDIRECT_URI
-        self.scopes = scopes or KICK_SCOPES
+        # Ensure scopes is a list of strings for proper joining later
+        _scopes_input = scopes or KICK_SCOPES
+        if isinstance(_scopes_input, str):
+            self.scopes = _scopes_input.split()
+        elif isinstance(_scopes_input, (list, tuple)):
+            self.scopes = list(_scopes_input)
+        else:
+            self.scopes = [] # Default to empty list if type is unexpected
+            self.logger.warning(f"Unexpected type for scopes: {type(_scopes_input)}. Defaulting to empty scopes.")
+
         self.token_file_path = Path(token_file or DEFAULT_TOKEN_FILE).resolve() # Use pathlib for robust path handling
         
-        self.token_endpoint = "https://id.kick.com/oauth2/token"
-        self.authorize_endpoint = "https://id.kick.com/oauth2/authorize"
+        self.token_endpoint = "https://id.kick.com/oauth/token"
+        self.authorize_endpoint = "https://id.kick.com/oauth/authorize"
 
         self.access_token: Optional[str] = None
         self.refresh_token: Optional[str] = None
@@ -86,17 +96,17 @@ class KickAuthManager:
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
-            "scope": self.scopes,
+            "scope": " ".join(self.scopes),
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
-            # "state": secrets.token_urlsafe(16) # Recommended for security
+            "state": self._generate_state()
         }
         # Using urllib.parse.urlencode to correctly format query parameters
-        query_string = urlencode(params)
+        query_string = urlencode(params, quote_via=quote_plus)
         
         # The Kick documentation specifies the OAuth server is id.kick.com
         # Need to confirm the exact path for the authorization endpoint from Kick documentation.
-        # Assuming /oauth2/authorize based on common patterns and Auth0.
+        # Assuming /oauth/authorize based on common patterns and Auth0.
         # Step 4 of App Setup mentions: "KICK will redirect control to your redirectURL with a code to complete the OAuth 2.0 Code Grant flow with PKCE."
         # The "OAuth 2.1" page mentions the host is https://id.kick.com
         # Let's assume the path is /connect/authorize or similar, as commonly found.
@@ -112,6 +122,9 @@ class KickAuthManager:
         # Standard OAuth endpoints are typically /authorize and /token.
         # Let's stick with common practice for now.
         
+        self.logger.info(f"Generated authorization URL (first 80 chars): {auth_url[:80]}...")
+        self.logger.debug(f"Full authorization URL: {auth_url}")
+        
         return auth_url, code_verifier
 
     async def exchange_code_for_tokens(self, code: str, code_verifier: str) -> dict:
@@ -122,12 +135,10 @@ class KickAuthManager:
         payload = {
             "grant_type": "authorization_code",
             "client_id": self.client_id,
+            "client_secret": self.client_secret,
             "code": code,
             "redirect_uri": self.redirect_uri,
             "code_verifier": code_verifier,
-            # Kick's docs imply client_secret is NOT sent for PKCE public clients.
-            # If it were a confidential client, it would be:
-            # "client_secret": self.client_secret 
         }
         
         # Create a session
@@ -169,21 +180,26 @@ class KickAuthManager:
                 actual_error_code = error_details.get("error")
                 if response.status in [400, 401] and actual_error_code == "invalid_grant":
                     self.clear_tokens() # Clear all tokens as refresh failed, likely needs re-auth
+                
+                # Log the full error details for better debugging
+                self.logger.error(f"Full error details from token endpoint: {error_details}")
+                
                 raise KickAuthManagerError(
-                    f"Error refreshing access token: {response.status} - {error_text}"
+                    f"Error exchanging code for tokens: {response.status} - {error_text}. Details: {error_details}"
                 )
-        except aiohttp.ClientError:
+        except aiohttp.ClientError as e:  # Changed from generic ClientError to aiohttp.ClientError
             # Handle network errors or other client-side issues
-            raise KickAuthManagerError(f"AIOHTTP client error during token refresh")
+            self.logger.error(f"AIOHTTP client error during token exchange: {e}", exc_info=True)
+            raise KickAuthManagerError(f"AIOHTTP client error during token exchange")
         except json.JSONDecodeError as e:
             text_response = await response.text()
-            raise KickAuthManagerError(f"Failed to decode JSON response from token refresh: {e}. Response text: {text_response}")
+            raise KickAuthManagerError(f"Failed to decode JSON response from token exchange: {e}. Response text: {text_response}")
         except KickAuthManagerError:
             # Re-raise KickAuthManagerError without modification
             raise
         except Exception:
             # Catch-all for unexpected errors
-            raise KickAuthManagerError(f"Unexpected error during token refresh")
+            raise KickAuthManagerError(f"Unexpected error during token exchange")
         finally:
             # Always close the session
             await session.close()
@@ -333,7 +349,7 @@ class KickAuthManager:
                 json.dump(token_data_to_save, f, indent=4)
         except IOError as e:
             # Log this error appropriately in a real app
-            logger.warning(f"Could not save tokens to file {self.token_file_path}: {e}")
+            self.logger.warning(f"Could not save tokens to file {self.token_file_path}: {e}")
             # Optionally raise KickAuthManagerError or handle as non-critical
     
     def _load_tokens(self) -> None:
@@ -349,7 +365,7 @@ class KickAuthManager:
 
             # Validate that the loaded tokens are for the current client_id
             if loaded_data.get("client_id") != self.client_id:
-                logger.warning(f"Tokens in {self.token_file_path} are for a different client_id ('{loaded_data.get('client_id')}' vs '{self.client_id}'). Clearing tokens.")
+                self.logger.warning(f"Tokens in {self.token_file_path} are for a different client_id ('{loaded_data.get('client_id')}' vs '{self.client_id}'). Clearing tokens.")
                 self.clear_tokens() # Clear the file as it's for a different app
                 return
 
@@ -361,18 +377,18 @@ class KickAuthManager:
             
             # Basic validation
             if not self.access_token or not isinstance(self.token_expires_at, (int, float)):
-                logger.warning(f"Invalid or incomplete token data in {self.token_file_path}. Missing keys or invalid type. Clearing tokens.")
+                self.logger.warning(f"Invalid or incomplete token data in {self.token_file_path}. Missing keys or invalid type. Clearing tokens.")
                 self.clear_tokens()
                 return
             
         except json.JSONDecodeError as e:
-            logger.warning(f"Error decoding token file {self.token_file_path}: {e}. Deleting corrupted file.")
+            self.logger.warning(f"Error decoding token file {self.token_file_path}: {e}. Deleting corrupted file.")
             # Optionally, attempt to delete or rename the corrupted file
             self.clear_tokens() # A simple approach: clear if corrupted
         except IOError as e:
-            logger.warning(f"Could not read token file {self.token_file_path}: {e}")
+            self.logger.warning(f"Could not read token file {self.token_file_path}: {e}")
         except Exception as e: # Catch any other unexpected error during load
-            logger.error(f"Unexpected error loading tokens: {e}")
+            self.logger.error(f"Unexpected error loading tokens: {e}")
             self.clear_tokens() # Clear in-memory tokens if load fails unexpectedly
 
     def is_access_token_valid(self, buffer_seconds: int = TOKEN_EXPIRY_BUFFER) -> bool:
@@ -402,7 +418,12 @@ class KickAuthManager:
             if self.token_file_path.exists():
                 self.token_file_path.unlink()
         except IOError as e:
-            logger.warning(f"Could not delete token file {self.token_file_path}: {e}")
+            self.logger.warning(f"Could not delete token file {self.token_file_path}: {e}")
+
+    def _generate_state(self) -> str:
+        # Implement the logic to generate a state parameter
+        # This is a placeholder and should be replaced with the actual implementation
+        return secrets.token_urlsafe(16)
 
 # Example usage (for manual testing or a helper script):
 # if __name__ == "__main__":

@@ -334,3 +334,82 @@ So that gift subscriptions are properly acknowledged and rewarded by the new eve
   - [x] 2. **[Refactor/Test]** Ensure `kickbot/event_models.py` has an accurate `GiftedSubscriptionEvent` Pydantic model for `channel.subscription.gifts`, aligning its fields (`gifter`, `giftees` (or `recipients`), `tier`, `created_at`, `expires_at`) with Kick docs.
   - [x] 3. **[Development]** In `KickWebhookHandler.handle_gifted_subscription_event` (ensure it takes `event: GiftedSubscriptionEvent`):
       *   Ensure it uses `self.bot`
+
+---
+
+# EPIC: Transition Chat Functionality to Official Kick API
+
+**Goal:** Refactor all bot chat message sending (general messages, replies) to use the official Kick Chat API endpoint (`POST /public/v1/chat`) with OAuth Bearer token authentication, eliminating the need for direct username/password/2FA login by `KickClient` for chat operations and making the bot fully non-interactive at runtime.
+
+---
+
+## User Story 7: Refactor Chat Message Sending to Use Kick API
+
+**As a** Sr_Botoshi operator,
+**I want** the bot to send all chat messages (including replies) using the official Kick Chat API (`POST /public/v1/chat`) with its OAuth token,
+**So that** the bot no longer relies on the `KickClient`'s direct login (username/password/2FA) for sending messages, enabling fully non-interactive startup and operation in Docker.
+
+**Given-When-Then (Behavior):**
+
+*   **Given** the bot has a valid OAuth access token (managed by `KickAuthManager`),
+*   **When** any part of the bot needs to send a general chat message (e.g., via `KickBot.send_text`),
+*   **Then** the message should be sent by making an authenticated `POST` request to `https://api.kick.com/public/v1/chat` with `type: "bot"` (or `type: "user"` if appropriate and `broadcaster_user_id` is provided) and the OAuth token in the `Authorization: Bearer` header.
+
+*   **Given** the bot has a valid OAuth access token,
+*   **When** any part of the bot needs to send a reply to a specific message (e.g., via `KickBot.reply_text`),
+*   **Then** the reply should be sent by making an authenticated `POST` request to `https://api.kick.com/public/v1/chat` including the `reply_to_message_id`, `type: "bot"` (or appropriate type), and the OAuth token.
+
+*   **Given** the `KickClient`'s direct login functionality (`_login` and its helper methods) is no longer used for sending chat messages or other essential API calls (like fetching user info, assuming that also moves to OAuth),
+*   **When** the bot starts,
+*   **Then** it should not prompt for 2FA, and the `KickClient` class should be simplified, removing its interactive login logic.
+
+**Acceptance Criteria:**
+
+*   All existing functionalities that send chat messages (e.g., command responses, event-triggered messages from `KickWebhookHandler`, timed messages) now use the Kick Chat API.
+*   The bot can successfully send messages to the configured streamer's chat using its OAuth identity.
+*   The `KickClient._login()` method (and its 2FA prompt) is no longer called during the bot's normal startup and operation for sending messages.
+*   The method for fetching the bot's own user info (`KickClient._get_user_info` or its replacement) uses OAuth tokens.
+*   (Assumption) The chat WebSocket connection can be established and maintained without relying on cookies/session from the `KickClient` direct login (ideally also using OAuth, or an alternative non-interactive method).
+
+**Tasks:**
+
+- [ ] 1.  **[Research/Verification]**
+    *   [ ] Confirm from Kick API documentation ([Chat API](https://docs.kick.com/apis/chat)) the exact request body parameters needed for sending messages as a bot (e.g., if `broadcaster_user_id` is needed or ignored when `type: "bot"`). *Docs state: "As a bot, the message will always be sent to the channel attached to your token."*
+    *   [ ] Verify if `https://kick.com/api/v1/user` (used in `KickClient._get_user_info`) can be called with an OAuth Bearer token. If not, find the equivalent official API endpoint for getting authenticated user details.
+    *   [ ] **Crucial:** Investigate and confirm the authentication mechanism for the Kick chat WebSocket (`ws_uri`). Can it use the OAuth token? If it relies on cookies from the direct login, this User Story might not fully eliminate the 2FA need without further changes to WebSocket handling.
+
+- [ ] 2.  **[Development - Chat Service/Helper]**
+    *   [ ] Create or refactor a helper function/method (e.g., within `kick_helper.py` or a new `kick_chat_api_service.py`) that takes message content, target chatroom/broadcaster info (if needed by API), reply ID (if any), and the OAuth token (or fetches it from `KickAuthManager`).
+    *   [ ] This service will use `aiohttp.ClientSession` (e.g., `KickBot.http_session`) to make the `POST` request to `https://api.kick.com/public/v1/chat`.
+    *   [ ] Implement error handling for API responses (e.g., 401, 403, 429, 500).
+
+- [ ] 3.  **[Refactor - `KickBot.send_text`]**
+    *   [ ] Modify `KickBot.send_text` to use the new Chat API service/helper instead of `send_message_in_chat` (if `send_message_in_chat` uses the old method).
+    *   [ ] Ensure it passes the necessary parameters according to the API.
+
+- [ ] 4.  **[Refactor - `KickBot.reply_text`]**
+    *   [ ] Modify `KickBot.reply_text` to use the new Chat API service/helper instead of `send_reply_in_chat`.
+    *   [ ] Ensure it correctly includes `reply_to_message_id`.
+
+- [ ] 5.  **[Refactor - `KickClient._get_user_info`]**
+    *   [ ] Modify `_get_user_info` (or create a new method in `KickBot` or an API service) to fetch user details using the OAuth token and the appropriate official API endpoint. Update `self.user_data`, `self.bot_name`, `self.user_id` in `KickBot` accordingly.
+
+- [ ] 6.  **[Refactor - `KickClient` Simplification]**
+    *   [ ] Once all functionalities relying on `KickClient._login()`'s `auth_token`, `xsrf`, and `cookies` are migrated to use the OAuth token via API calls:
+        *   Remove `KickClient._login()` and its helper methods (`_request_token_provider`, `_base_login_payload`, `_send_login_request`, `_get_2fa_code`, `_send_login_2fa_code`).
+        *   Remove `self.auth_token`, `self.xsrf`, `self.cookies` attributes from `KickClient`.
+        *   Adjust `KickClient.__init__` to no longer call `self._login()`.
+    *   [ ] The `KickClient` might still retain `self.scraper` (the `tls_client.Session`) if it's needed for other specific, non-authenticated scraping tasks, and `self.session` (the `aiohttp.ClientSession`).
+
+- [ ] 7.  **[Test (TDD/BDD)]**
+    *   [ ] Write unit tests for the new Chat API service/helper, mocking `aiohttp` requests and `KickAuthManager`. Test successful sends, replies, and API error handling.
+    *   [ ] Update/write integration tests for `KickBot.send_text` and `KickBot.reply_text` to ensure they correctly utilize the new service.
+    *   [ ] Test that `KickClient` no longer attempts its direct login during `KickBot` initialization.
+    *   [ ] Test the refactored user info fetching.
+
+- [ ] 8.  **[Documentation]**
+    *   [ ] Update any internal documentation regarding how chat messages are sent.
+    *   [ ] Document changes to `KickClient`'s role.
+    *   [ ] Update `Dockerfile` and `docker-compose.yml` if any startup commands or environment variable needs change due to `KickClient` simplification (though likely minimal if `botoshi.py`'s call structure remains).
+
+---

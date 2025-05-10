@@ -1,7 +1,12 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 from time import sleep
 import requests
 from urllib.parse import urlencode, quote_plus
+import asyncio
 
 from threading import Lock, Timer
 lock = Lock()
@@ -298,14 +303,14 @@ async def send_alert(img, audio, text, tts):
         except Exception as e:
             print(f'Error sending alert: {e}')
 
-if __name__ == '__main__':
-
+async def main():
     USERBOT_EMAIL = settings['KickEmail']
     USERBOT_PASS = settings['KickPass']
     STREAMER = settings['KickStreamer']
 
     bot = KickBot(USERBOT_EMAIL, USERBOT_PASS)
-    bot.set_streamer(STREAMER)
+    bot.set_settings(settings)
+    await bot.set_streamer(STREAMER)
 
     bot.chatroom_id = settings['KickChatroom']
 
@@ -367,5 +372,8 @@ if __name__ == '__main__':
     bot.add_timed_event(timedelta(seconds=1), im_back)
 
     
-    bot.poll()
+    await bot.run()
+
+if __name__ == '__main__':
+    asyncio.run(main())
     

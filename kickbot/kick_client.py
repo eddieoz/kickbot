@@ -1,6 +1,7 @@
 import requests
 import logging
 import tls_client
+import aiohttp
 
 from typing import Optional
 from requests.cookies import RequestsCookieJar
@@ -14,13 +15,14 @@ class KickClient:
     """
     Class mainly for authenticating user, and handling http requests using tls_client to bypass cloudflare
     """
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, username: str, password: str, aiohttp_session: Optional[aiohttp.ClientSession] = None) -> None:
         self.username: str = username
         self.password: str = password
         self.scraper = tls_client.Session(
             client_identifier="chrome_116",
             random_tls_extension_order=True
         )
+        self.session = aiohttp_session
         self.xsrf: Optional[str] = None
         self.cookies: Optional[RequestsCookieJar] = None
         self.auth_token: Optional[str] = None
@@ -149,5 +151,25 @@ class KickClient:
         headers = BASE_HEADERS.copy()
         headers['X-Xsrf-Token'] = self.xsrf
         response = self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
-        self.auth_token = response.json().get('token')
-        return response.status_code == 200
+        
+        if response.status_code == 200:
+            try:
+                login_data = response.json()
+                self.auth_token = login_data.get('token')
+                if self.auth_token:
+                    return True
+                else:
+                    logger.error("2FA login successful (200 OK) but no token found in response.")
+                    # Potentially raise an error here or return False to be caught by the caller
+                    # For now, let it fall through to return False as per original logic's effect
+                    return False # Or raise specific error
+            except requests.exceptions.JSONDecodeError as e:
+                logger.error(f"2FA login successful (200 OK) but failed to parse JSON response: {e}. Response text: {response.text}")
+                return False # Or raise specific error
+        else:
+            error_text = response.text
+            logger.error(f"2FA login request failed. Status: {response.status_code}, Response: {error_text}")
+            # The caller will raise based on the boolean, but we've logged the details.
+            # To make the exception more direct, we could raise here:
+            # raise KickAuthException(f"2FA login failed. Status: {response.status_code}, Response: {error_text}")
+            return False

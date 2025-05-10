@@ -8,3 +8,4 @@ websockets==11.0.3
 aiohttp
 pyngrok
 cryptography>=44.0.0
+python-dotenv

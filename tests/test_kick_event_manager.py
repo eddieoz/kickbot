@@ -21,10 +21,22 @@ def mock_auth_manager():
 
 @pytest.fixture
 def mock_kick_client_session():
-    '''Fixture for a mocked aiohttp ClientSession within KickClient.'''
-    mock_session = AsyncMock(spec=aiohttp.ClientSession) # If aiohttp is directly used by KEM
-    # If KEM uses client.session.get/post/delete, then mock client.session
-    return mock_session
+    '''Fixture for a mocked aiohttp.ClientSession.'''
+    # Create a MagicMock for the session itself, as ClientSession is not awaitable directly
+    session_mock = MagicMock(spec=aiohttp.ClientSession)
+    
+    # Configure common methods like get, post, delete to BE AsyncMock instances
+    # so they can be awaited and have await-specific assertions.
+    session_mock.get = AsyncMock()
+    session_mock.post = AsyncMock()
+    session_mock.delete = AsyncMock()
+    
+    # close() is usually a synchronous method on ClientSession, but if it's called via 'async with',
+    # its __aexit__ might be awaited. If it's just called as session.close(), it's not async.
+    # For simplicity, if it needs to be awaited, it should also be an AsyncMock.
+    # If it's synchronous, MagicMock is fine. Let's assume it might be used in an async context.
+    session_mock.close = AsyncMock() 
+    return session_mock
 
 @pytest.fixture
 def mock_kick_client(mock_kick_client_session):
@@ -60,26 +72,37 @@ async def test_get_headers_no_token(event_manager, mock_auth_manager):
 @pytest.mark.asyncio
 async def test_list_subscriptions_success(event_manager, mock_kick_client):
     '''Test listing subscriptions successfully.'''
-    mock_http_response = AsyncMock() 
-    mock_http_response.status = 200
-    # Ensure mock data includes broadcaster_user_id matching the event_manager's ID
+    # This is the mock for the actual response content (e.g., what response.json() would yield from)
+    mock_response_data_container = AsyncMock() 
+    mock_response_data_container.status = 200
     expected_broadcaster_id = event_manager.broadcaster_user_id
-    mock_http_response.json = AsyncMock(return_value={
+    mock_response_data_container.json = AsyncMock(return_value={
         "data": [
             {"id": "s1", "broadcaster_user_id": expected_broadcaster_id, "type": "channel.followed"},
             {"id": "s2", "broadcaster_user_id": expected_broadcaster_id, "type": "channel.subscribed"}
         ]
     })
     
-    # session.get() should return an async context manager.
-    mock_get_context_manager = AsyncMock()
-    mock_get_context_manager.__aenter__.return_value = mock_http_response
-    mock_get_context_manager.__aexit__ = AsyncMock(return_value=False) # Ensure it's an awaitable mock
-
-    mock_kick_client.session.get.return_value = mock_get_context_manager
+    # Get the AsyncMock for session.get() from the fixture
+    mock_session_get_method = mock_kick_client.session.get
     
+    # Configure this AsyncMock to also act as an async context manager
+    # Its __aenter__ should yield the response data container.
+    mock_session_get_method.__aenter__ = AsyncMock(return_value=mock_response_data_container)
+    mock_session_get_method.__aexit__ = AsyncMock(return_value=False)
+    
+    # If session.get() itself is awaited (outside async with), it should also logically yield the response data or similar.
+    # For async with, the __aenter__ is primary. Let's ensure its direct return (if awaited) is also consistent.
+    # However, aiohttp.session.get() returns a _RequestContextManager, not the final response directly when awaited.
+    # The _RequestContextManager itself is the context manager. So the above __aenter__/__aexit__ is key.
+    # We don't need to set mock_session_get_method.return_value if it's used directly by 'async with'.
+    # 'async with' will use __aenter__ and __aexit__ if present on the object returned by the expression. 
+    # If the expression itself (session.get()) is awaitable and returns the context manager, that's handled.
+    # Here, session.get() *is* the context manager mock.
+
     subscriptions = await event_manager.list_subscriptions()
     
+    assert subscriptions is not None, "list_subscriptions should not return None on success"
     assert len(subscriptions) == 2
     assert subscriptions[0]["id"] == "s1"
     assert subscriptions[1]["id"] == "s2"
@@ -89,11 +112,21 @@ async def test_list_subscriptions_success(event_manager, mock_kick_client):
 @pytest.mark.asyncio
 async def test_list_subscriptions_api_error(event_manager, mock_kick_client):
     '''Test API error when listing subscriptions.'''
-    mock_http_response = AsyncMock()
-    mock_http_response.status = 500
-    mock_http_response.text = AsyncMock(return_value="Server Error")
+    
+    # This is the mock for the actual response content (e.g., aiohttp.ClientResponse content part)
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 500
+    mock_response_content.text = AsyncMock(return_value="Server Error")
 
-    mock_kick_client.session.get = AsyncMock(return_value=mock_http_response)
+    # This is the mock for the async context manager (e.g., aiohttp.ClientResponse itself)
+    # It should NOT be an AsyncMock itself, but its __aenter__/__aexit__ should be.
+    mock_response_context_manager = MagicMock() # Use MagicMock for the context manager object
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=False) # Or True, or None depending on desired exit behavior
+
+    # mock_kick_client.session.get is an AsyncMock (from the fixture). 
+    # Configure its return_value when it's awaited.
+    mock_kick_client.session.get.return_value = mock_response_context_manager
 
     subscriptions = await event_manager.list_subscriptions()
     assert subscriptions is None
@@ -113,24 +146,24 @@ async def test_subscribe_to_events_success(event_manager, mock_kick_client):
     '''Test subscribing to events successfully.'''
     events = [{"name": "channel.subscribed", "version": 1}]
     
-    # 1. This will be the ClientResponse object
-    mock_http_client_response = AsyncMock()
-    mock_http_client_response.status = 200
-    mock_http_client_response.json = AsyncMock(return_value={
+    # This is the mock for the actual response content (e.g., aiohttp.ClientResponse content part)
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 200
+    mock_response_content.json = AsyncMock(return_value={
         "data": [
             {"event": "channel.subscribed", "subscription_id": "new_sub_1", "error": None, "name": "channel.subscribed"}
         ]
     })
-    # Make it an async context manager
-    mock_http_client_response.__aenter__ = AsyncMock(return_value=mock_http_client_response)
-    mock_http_client_response.__aexit__ = AsyncMock(return_value=False)
 
-    # Ensure the event_manager uses this patched session or its client uses the patched session
-    # This depends on how event_manager.client.session is structured.
-    # For this to work, event_manager.client.session must be a real aiohttp.ClientSession 
-    # or the mock_kick_client fixture must be set up such that its .session.post is the patched one.
-    # A simpler way if mock_kick_client is already in use by event_manager:
-    mock_kick_client.session.post = lambda *args, **kwargs: mock_http_client_response
+    # This is the mock for the async context manager (e.g., aiohttp.ClientResponse itself)
+    # It should not be an AsyncMock itself, but its __aenter__/__aexit__ should be.
+    mock_response_context_manager = MagicMock()
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=False)
+    
+    # mock_kick_client.session.post is an AsyncMock (from fixture). 
+    # When awaited, it returns the mock_response_context_manager.
+    mock_kick_client.session.post.return_value = mock_response_context_manager
 
     success = await event_manager.subscribe_to_events(events)
     
@@ -144,25 +177,21 @@ async def test_subscribe_to_events_partial_success(event_manager, mock_kick_clie
         {"name": "channel.subscribed", "version": 1},
         {"name": "channel.followed", "version": 1}
     ]
-    mock_http_response = AsyncMock()
-    mock_http_response.status = 200 # API itself returns 200, but payload indicates partial failure
-    mock_http_response.json = AsyncMock(return_value={
+    # This is the mock for the actual response content
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 200 # API itself returns 200, but payload indicates partial failure
+    mock_response_content.json = AsyncMock(return_value={
         "data": [
             {"event": "channel.subscribed", "subscription_id": "new_sub_ok", "error": None},
             {"event": "channel.followed", "subscription_id": None, "error": "some_error"}
         ]
     })
-    mock_http_client_response = AsyncMock()
-    mock_http_client_response.status = 200
-    mock_http_client_response.json = AsyncMock(return_value={
-        "data": [
-            {"event": "channel.subscribed", "subscription_id": "new_sub_ok", "error": None},
-            {"event": "channel.followed", "subscription_id": None, "error": "some_error"}
-        ]
-    })
-    mock_http_client_response.__aenter__ = AsyncMock(return_value=mock_http_client_response)
-    mock_http_client_response.__aexit__ = AsyncMock(return_value=False)
-    mock_kick_client.session.post = lambda *args, **kwargs: mock_http_client_response
+
+    # This is the mock for the async context manager
+    mock_response_context_manager = MagicMock()
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=False)
+    mock_kick_client.session.post.return_value = mock_response_context_manager
     
     success = await event_manager.subscribe_to_events(events)
     
@@ -173,23 +202,19 @@ async def test_subscribe_to_events_partial_success(event_manager, mock_kick_clie
 async def test_subscribe_to_events_all_fail_in_payload(event_manager, mock_kick_client):
     '''Test subscribing when API returns 200 but all events in payload failed.'''
     events = [{"name": "channel.subscribed", "version": 1}]
-    mock_http_response = AsyncMock()
-    mock_http_response.status = 200
-    mock_http_response.json = AsyncMock(return_value={
+    # This is the mock for the actual response content
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 200
+    mock_response_content.json = AsyncMock(return_value={
         "data": [
             {"event": "channel.subscribed", "subscription_id": None, "error": "failed_to_subscribe"}
         ]
     })
-    mock_http_client_response = AsyncMock()
-    mock_http_client_response.status = 200
-    mock_http_client_response.json = AsyncMock(return_value={
-        "data": [
-            {"event": "channel.subscribed", "subscription_id": None, "error": "failed_to_subscribe"}
-        ]
-    })
-    mock_http_client_response.__aenter__ = AsyncMock(return_value=mock_http_client_response)
-    mock_http_client_response.__aexit__ = AsyncMock(return_value=False)
-    mock_kick_client.session.post = lambda *args, **kwargs: mock_http_client_response
+    # This is the mock for the async context manager
+    mock_response_context_manager = MagicMock()
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=False)
+    mock_kick_client.session.post.return_value = mock_response_context_manager
     
     success = await event_manager.subscribe_to_events(events)
     assert success is False
@@ -206,16 +231,16 @@ async def test_subscribe_to_events_no_events_provided(event_manager, mock_kick_c
 async def test_subscribe_to_events_api_error(event_manager, mock_kick_client):
     '''Test API error during subscription.'''
     events = [{"name": "channel.subscribed", "version": 1}]
-    mock_http_response = AsyncMock()
-    mock_http_response.status = 400
-    mock_http_response.text = AsyncMock(return_value="Bad Request")
+    # This is the mock for the actual response content
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 400
+    mock_response_content.text = AsyncMock(return_value="Bad Request")
 
-    mock_http_client_response = AsyncMock()
-    mock_http_client_response.status = 400
-    mock_http_client_response.text = AsyncMock(return_value="Bad Request")
-    mock_http_client_response.__aenter__ = AsyncMock(return_value=mock_http_client_response)
-    mock_http_client_response.__aexit__ = AsyncMock(return_value=False)
-    mock_kick_client.session.post = lambda *args, **kwargs: mock_http_client_response
+    # This is the mock for the async context manager
+    mock_response_context_manager = MagicMock()
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=False)
+    mock_kick_client.session.post.return_value = mock_response_context_manager
 
     success = await event_manager.subscribe_to_events(events)
     assert success is False
@@ -228,14 +253,15 @@ async def test_unsubscribe_by_ids_success(event_manager, mock_kick_client):
     event_manager.active_subscription_ids = ["id1", "id2", "id3"]
     ids_to_remove = ["id1", "id3"]
     
-    mock_http_response = AsyncMock()
-    mock_http_response.status = 204 # No Content for successful DELETE
+    # This is the mock for the actual response content
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 204 # No Content for successful DELETE
     
-    mock_http_client_response = AsyncMock()
-    mock_http_client_response.status = 204 # No Content for successful DELETE
-    mock_http_client_response.__aenter__ = AsyncMock(return_value=mock_http_client_response)
-    mock_http_client_response.__aexit__ = AsyncMock(return_value=None)
-    mock_kick_client.session.delete = lambda *args, **kwargs: mock_http_client_response
+    # This is the mock for the async context manager
+    mock_response_context_manager = MagicMock()
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=None) # Typically None for __aexit__
+    mock_kick_client.session.delete.return_value = mock_response_context_manager # session.delete() is awaitable, returns the context manager
     
     success = await event_manager._unsubscribe_by_ids(ids_to_remove)
     
@@ -258,16 +284,16 @@ async def test_unsubscribe_by_ids_no_ids(event_manager, mock_kick_client):
 async def test_unsubscribe_by_ids_api_error(event_manager, mock_kick_client):
     '''Test API error when unsubscribing.'''
     ids_to_remove = ["id1"]
-    mock_http_response = AsyncMock()
-    mock_http_response.status = 500
-    mock_http_response.text = AsyncMock(return_value="Server Error")
+    # This is the mock for the actual response content
+    mock_response_content = AsyncMock()
+    mock_response_content.status = 500
+    mock_response_content.text = AsyncMock(return_value="Server Error")
 
-    mock_http_client_response = AsyncMock()
-    mock_http_client_response.status = 500
-    mock_http_client_response.text = AsyncMock(return_value="Server Error")
-    mock_http_client_response.__aenter__ = AsyncMock(return_value=mock_http_client_response)
-    mock_http_client_response.__aexit__ = AsyncMock(return_value=None)
-    mock_kick_client.session.delete = lambda *args, **kwargs: mock_http_client_response
+    # This is the mock for the async context manager
+    mock_response_context_manager = MagicMock()
+    mock_response_context_manager.__aenter__ = AsyncMock(return_value=mock_response_content)
+    mock_response_context_manager.__aexit__ = AsyncMock(return_value=None)
+    mock_kick_client.session.delete.return_value = mock_response_context_manager
 
     success = await event_manager._unsubscribe_by_ids(ids_to_remove)
     assert success is False

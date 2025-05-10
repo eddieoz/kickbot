@@ -211,8 +211,10 @@ class TestKickAuthManagerTokenExchange(unittest.IsolatedAsyncioTestCase):
         mock_session_instance.close = AsyncMock()
         MockClientSession.return_value = mock_session_instance
 
-        with self.assertRaisesRegex(KickAuthManagerError, f"Error exchanging code for tokens: 503 - {mock_error_text}"):
+        expected_msg = f"Error exchanging code for tokens: 503 - {mock_error_text}"
+        with self.assertRaises(KickAuthManagerError) as cm:
             await manager.exchange_code_for_tokens("any_code", "any_verifier")
+        self.assertEqual(str(cm.exception), expected_msg)
         
         mock_session_instance.close.assert_called_once()
 
@@ -233,8 +235,10 @@ class TestKickAuthManagerTokenExchange(unittest.IsolatedAsyncioTestCase):
         mock_session_instance.close = AsyncMock()
         MockClientSession.return_value = mock_session_instance
 
-        with self.assertRaises(KickAuthManagerError):
+        expected_msg = "AIOHTTP client error during token exchange"
+        with self.assertRaises(KickAuthManagerError) as cm:
             await manager.exchange_code_for_tokens("any_code", "any_verifier")
+        self.assertEqual(str(cm.exception), expected_msg)
         
         mock_session_instance.close.assert_called_once()
     

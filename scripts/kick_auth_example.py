@@ -18,6 +18,8 @@ Requirements:
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import sys
 import asyncio
 import argparse
@@ -55,7 +57,7 @@ async def handle_oauth_callback(request):
         callback_received.set()  # Set event even on error
         return web.Response(text=f"Authorization failed: {error} - {error_description}", status=400)
 
-async def start_callback_server(port=8080, path='/callback'):
+async def start_callback_server(port=8081, path='/callback'):
     """Start a local web server to receive the OAuth callback"""
     app = web.Application()
     app.router.add_get(path, handle_oauth_callback)
@@ -63,13 +65,13 @@ async def start_callback_server(port=8080, path='/callback'):
     # Start the server
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, 'localhost', port)
+    site = web.TCPSite(runner, '0.0.0.0', port)  # Listen on all interfaces
     await site.start()
     
-    print(f"Callback server started at http://localhost:{port}{path}")
+    print(f"Callback server started at http://0.0.0.0:{port}{path}")
     return runner
 
-async def authorize():
+async def authorize(callback_port=8081):
     """Start the authorization flow"""
     global auth_manager, code_verifier, auth_code
     
@@ -88,40 +90,30 @@ async def authorize():
     # Get authorization URL and code verifier
     auth_url, code_verifier = auth_manager.get_authorization_url()
     
-    # Start callback server
-    callback_port = 8080
-    callback_path = '/callback'
-    runner = await start_callback_server(callback_port, callback_path)
+    # Manual Code Acquisition Flow
+    print("\n--- Manual Authorization Required ---")
+    print(f"1. Open this URL in your web browser:\n   {auth_url}")
+    print("\n2. Log in to Kick and authorize the application.")
+    print("3. Your browser will be redirected to a URL starting with 'https://localhost/callback?code=...'")
+    print("   It might show a 'site can't be reached' error, but the URL in the address bar is important.")
+    print("4. Copy the value of the 'code' parameter from the address bar.")
     
+    auth_code_manual = input("5. Paste the authorization code here and press Enter: ").strip()
+
+    if not auth_code_manual:
+        print("No authorization code provided. Exiting.")
+        return
+
     try:
-        # Update the redirect URI if needed
-        if auth_manager.redirect_uri != f"http://localhost:{callback_port}{callback_path}":
-            print(f"WARNING: Your configured redirect URI ({auth_manager.redirect_uri}) "
-                  f"doesn't match the callback server URL (http://localhost:{callback_port}{callback_path}).")
-            print("Make sure these match in your Kick application settings.")
-        
-        # Open browser for authorization
-        print(f"Opening browser to authorize: {auth_url}")
-        webbrowser.open(auth_url)
-        
-        # Wait for callback
-        print("Waiting for authorization callback...")
-        await callback_received.wait()
-        
-        if not auth_code:
-            print("Authorization failed: No code received")
-            return
-        
         # Exchange code for tokens
-        print(f"Exchanging authorization code for tokens...")
-        tokens = await auth_manager.exchange_code_for_tokens(auth_code, code_verifier)
-        print(f"Tokens received and stored!")
-        
+        print("\nExchanging authorization code for tokens...")
+        tokens = await auth_manager.exchange_code_for_tokens(auth_code_manual, code_verifier)
+        print("Tokens received and stored successfully in kick_token.json!")
         # Access token is now stored in auth_manager and in the token file
         
-    finally:
-        # Stop the callback server
-        await runner.cleanup()
+    except Exception as e:
+        print(f"Error exchanging code for tokens: {e}")
+        print("Please ensure you copied the code correctly and that your client ID and redirect URI are correctly set up.")
 
 async def test_api_request():
     """Test making an API request with the token"""
@@ -201,6 +193,7 @@ async def main():
     parser.add_argument('--test-api', action='store_true', help='Test API with token')
     parser.add_argument('--info', action='store_true', help='Show token information')
     parser.add_argument('--clear', action='store_true', help='Clear stored tokens')
+    parser.add_argument('--port', type=int, default=8081, help='Port for callback server (default: 8080)')
     
     args = parser.parse_args()
     
@@ -211,7 +204,7 @@ async def main():
     elif args.test_api:
         await test_api_request()
     elif args.authorize:
-        await authorize()
+        await authorize(callback_port=args.port)
     else:
         # Default behavior: try to use existing token, authorize if needed
         try:
@@ -229,7 +222,7 @@ async def main():
         except KickAuthManagerError:
             # No valid token, authorize
             print("No valid token found. Starting authorization...")
-            await authorize()
+            await authorize(callback_port=args.port)
 
 if __name__ == "__main__":
     import time  # Import here to avoid conflict with async function
