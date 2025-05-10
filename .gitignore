@@ -185,3 +185,4 @@ botoshi.bat
 .cursor/rules/*.mdc
 .cursor/*
 .cursor/rules/
+kickbot/original_kick_bot.py
