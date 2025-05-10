@@ -4,6 +4,7 @@ import json
 import logging
 from typing import Dict, Callable, Optional, Any, Coroutine, Union
 import datetime # Added for created_at timestamp
+import requests
 
 from pydantic import ValidationError
 from .event_models import FollowEvent, SubscriptionEventKick, GiftedSubscriptionEvent, SubscriptionRenewalEvent, AnyKickEvent, parse_kick_event_payload, ChatMessageSentEventAdjusted
@@ -193,39 +194,40 @@ class KickWebhookHandler:
             kick_event_type_header = request.headers.get("Kick-Event-Type")
             logger.debug(f"Kick-Event-Type header: {kick_event_type_header}")
 
-            # Prepare the payload for parsing. For most events, this is payload_dict_original.
-            # For 'chat.message.sent', we need to transform it.
+            # DIRECT CHAT MESSAGE PROCESSING:
+            # If this is a chat.message.sent event, process it directly using our deduplication path
+            is_chat_message = (kick_event_type_header == "chat.message.sent" or 
+                            (payload_dict_original.get("message_id") and 
+                             payload_dict_original.get("content") and 
+                             payload_dict_original.get("sender")))
+                
+            if is_chat_message:
+                logger.info(f"Processing chat message directly: '{payload_dict_original.get('content')}'")
+                
+                # Process the message directly
+                await self._process_chat_message_directly(payload_dict_original)
+                return web.Response(status=200, text="Chat message processed")
+
+            # For other event types, continue with standard pydantic model processing
+            
+            # Prepare the payload for parsing
             payload_to_parse = payload_dict_original
             event_type_for_parser = payload_dict_original.get("event") # Default way to get event type
 
-            if kick_event_type_header == "chat.message.sent":
-                logger.debug("Transforming chat.message.sent payload for KickEventBase compatibility.")
-                event_type_for_parser = "chat.message.sent" # Explicitly set for parser map
-                payload_to_parse = {
-                    "event": event_type_for_parser,
-                    "id": payload_dict_original.get("message_id", "unknown_message_id"), # Use message_id from chat payload
-                    "channel_id": str(payload_dict_original.get("broadcaster", {}).get("user_id", "unknown_channel_id")),
-                    "created_at": datetime.datetime.utcnow().isoformat() + "Z", # Generate timestamp, Kick format often has Z
-                    "data": payload_dict_original  # The original chat payload becomes the 'data' field
-                }
-                logger.debug(f"Transformed payload for chat.message.sent: {json.dumps(payload_to_parse, indent=2)}")
-            elif not event_type_for_parser and kick_event_type_header:
-                # If 'event' field is missing in payload, but header is present, use header.
-                # This might be useful if other events also start omitting 'event' in body.
+            # If 'event' field is missing in payload, but header is present, use header
+            if not event_type_for_parser and kick_event_type_header:
                 logger.debug(f"Using Kick-Event-Type header '{kick_event_type_header}' as event type for parser.")
                 payload_to_parse['event'] = kick_event_type_header # Add it to the dict if not present
                 event_type_for_parser = kick_event_type_header
 
             # Parse the payload dictionary into a Pydantic model
-            # The parse_kick_event_payload function uses the 'event' field in payload_to_parse for dispatch.
             parsed_event = parse_kick_event_payload(payload_to_parse)
 
             if not parsed_event:
-                logger.warning(f"Could not parse webhook payload into a known event model. Original Payload: {payload_dict_original}, Processed for parsing: {payload_to_parse}")
-                return web.Response(status=200, text="Event received but not processed due to unknown structure or validation error.")
+                logger.warning(f"Could not parse webhook payload into a known event model. Original Payload: {payload_dict_original}")
+                return web.Response(status=200, text="Event received but not processed due to unknown structure.")
 
             # Dispatch the event using the parsed Pydantic model
-            # The event_type used for dispatching should be the one determined above (either from payload or header)
             await self.dispatch_event(event_type_for_parser, parsed_event) 
             
             return web.Response(status=200, text="Event received and processed")
@@ -233,7 +235,79 @@ class KickWebhookHandler:
         except Exception as e:
             logger.exception(f"Unhandled error handling webhook: {e}") # Use logger.exception to include stack trace
             return web.Response(status=500, text=f"Internal server error: {e}")
-    
+
+    async def _process_chat_message_directly(self, message_data: dict):
+        """
+        Process chat messages directly without requiring them to pass through Pydantic model validation.
+        This method handles raw message data from Kick's webhook.
+        
+        Args:
+            message_data: The raw chat message data from the webhook
+        """
+        bot = self.kick_bot_instance
+        if not bot:
+            logger.error("KickBot instance not available in WebhookHandler for direct chat message processing.")
+            return
+            
+        try:
+            # Check if message content contains 'gerard' and send to endpoint
+            message_content = message_data.get('content', '')
+            sender_username = message_data.get('sender', {}).get('username', '')
+            
+            if message_content and 'gerard' in message_content.casefold():
+                try:
+                    req = requests.post("http://192.168.0.30:7862/update_chat", 
+                                       json={'nickname': sender_username, 'context': message_content})
+                    if req.status_code == 200:
+                        logger.info("Webhook: Context updated successfully for gerard message.")
+                    else:
+                        logger.warning(f"Webhook: Failed to update context: {req.status_code}")
+                except Exception as e:
+                    logger.error(f"Webhook: Error updating context for gerard message: {e}")
+            
+            # Structure the message in the format expected by KickMessage class
+            sender_identity_badges = []
+            sender = message_data.get("sender", {})
+            
+            if sender.get("identity") and sender.get("identity", {}).get("badges"):
+                for b in sender.get("identity", {}).get("badges", []):
+                    sender_identity_badges.append({
+                        'type': b.get('type', ''),
+                        'text': b.get('text', ''),
+                        'count': b.get('count', 0)
+                    })
+            
+            # Create a properly formatted message that KickMessage class can understand
+            formatted_message = {
+                "id": message_data.get("message_id", "unknown"),  # webhook uses message_id, but KickMessage expects id
+                "chatroom_id": str(message_data.get("broadcaster", {}).get("user_id", bot.chatroom_id)),
+                "content": message_data.get("content", ""),
+                "type": "message",
+                "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "sender": {
+                    "id": str(sender.get("user_id", "unknown")),
+                    "username": sender.get("username", "unknown"),
+                    "slug": sender.get("channel_slug", "unknown"),
+                    "identity": {
+                        "color": sender.get("identity", {}).get("username_color", "#FFFFFF"),
+                        "badges": sender_identity_badges
+                    }
+                }
+            }
+            
+            logger.info(f"Directly processing chat message: '{formatted_message.get('content')}' from {formatted_message.get('sender', {}).get('username')}")
+            
+            # Use KickBot's _handle_chat_message method for consistent message handling
+            # This will also take advantage of the message deduplication mechanism
+            try:
+                await bot._handle_chat_message(formatted_message)
+                logger.debug(f"Webhook: Successfully processed message with KickBot._handle_chat_message")
+            except Exception as e:
+                logger.error(f"Webhook: Error processing message with KickBot._handle_chat_message: {e}", exc_info=True)
+                
+        except Exception as e:
+            logger.error(f"Webhook: Error directly processing message: {e}", exc_info=True)
+
     def register_event_handler(self, event_type: str, handler: Callable[[AnyKickEvent], Coroutine[Any, Any, None]]):
         """
         Register a handler for a specific event type.
@@ -472,16 +546,24 @@ class KickWebhookHandler:
             f"Webhook received CHAT MESSAGE: User {chat_data.sender.username} said '{chat_data.content}' in channel {chat_data.broadcaster.username}"
         )
 
+        # Check if message content contains 'gerard' and send to endpoint
+        if chat_data.content and 'gerard' in chat_data.content.casefold():
+            try:
+                req = requests.post("http://192.168.0.30:7862/update_chat", 
+                                   json={'nickname': chat_data.sender.username, 'context': chat_data.content})
+                if req.status_code == 200:
+                    logger.info("Webhook event handler: Context updated successfully for gerard message.")
+                else:
+                    logger.warning(f"Webhook event handler: Failed to update context: {req.status_code}")
+            except Exception as e:
+                logger.error(f"Webhook event handler: Error updating context for gerard message: {e}")
+
         bot = self.kick_bot_instance
         if not bot:
             logger.error("KickBot instance not available in WebhookHandler for chat message.")
             return
 
-        # 1. Construct the dictionary for KickMessage
-        #    We need to ensure this matches what KickMessage expects from the original WebSocket structure.
-        #    The 'id' for KickMessage is the message ID, 'chatroom_id' is important.
-        #    'created_at' should be in ISO format if KickMessage expects it.
-        #    The 'sender' structure needs to map badges correctly.
+        # Construct the dictionary for KickMessage in the same format as _process_chat_message_directly
         sender_identity_badges = []
         if chat_data.sender.identity and chat_data.sender.identity.badges:
             for b in chat_data.sender.identity.badges:
@@ -491,13 +573,13 @@ class KickWebhookHandler:
                     'count': b.count if b.count is not None else 0 # Ensure count is present, default to 0 if None
                 })
         
+        # Format the message in the same way as _process_chat_message_directly
         message_data_for_km = {
             "id": chat_data.message_id, # This is the actual message_id
-            "chatroom_id": str(chat_data.broadcaster.user_id), # Assuming broadcaster.user_id can map to chatroom_id contextually
-                                                              # Or use bot.chatroom_id if this webhook is always for the bot's main channel
+            "chatroom_id": str(chat_data.broadcaster.user_id), # Use broadcaster user_id as chatroom_id
             "content": chat_data.content,
-            "type": "message", # Original WebSocket messages had this, KickMessage might rely on it.
-            "created_at": event.created_at.isoformat() if event.created_at else datetime.datetime.utcnow().isoformat() + "Z", # from KickEventBase wrapper
+            "type": "message", # Original WebSocket messages had this
+            "created_at": event.created_at.isoformat() if event.created_at else datetime.datetime.utcnow().isoformat() + "Z",
             "sender": {
                 "id": str(chat_data.sender.user_id),
                 "username": chat_data.sender.username,
@@ -507,47 +589,15 @@ class KickWebhookHandler:
                     "badges": sender_identity_badges
                 }
             }
-            # metadata: Optional field in KickMessage, can be {} or omitted if not used
         }
 
         try:
-            # We need to import KickMessage here
-            from .kick_message import KickMessage # Ensure this import is valid
-            km = KickMessage(message_data_for_km) 
+            # Use the KickBot's _handle_chat_message method directly
+            # This leverages the message deduplication mechanism
+            await bot._handle_chat_message(message_data_for_km)
+            logger.debug(f"Webhook handler: Successfully processed message with KickBot._handle_chat_message")
         except Exception as e:
-            logger.error(f"Webhook: Failed to create KickMessage: {e} | Data: {message_data_for_km}", exc_info=True)
-            return
-
-        # 2. Replicate handler logic from KickBot._handle_chat_message_logic directly
-        # Ensure km.content is not None before calling casefold()
-        content_lower = km.content.casefold() if km.content else ""
-        if content_lower in bot.handled_messages:
-            logger.info(f"Webhook: Handling message: {km.content!r}")
-            try:
-                await bot.handled_messages[content_lower](bot, km)
-            except Exception as e:
-                logger.error(f"Webhook: Error in message handler for '{content_lower}': {e}", exc_info=True)
-            return
-
-        try:
-            command_part = km.content.split(' ', 1)[0].casefold() if km.content else ""
-            if command_part and command_part in bot.handled_commands:
-                logger.info(f"Webhook: Handling command: {km.content!r}")
-                try:
-                    await bot.handled_commands[command_part](bot, km)
-                except Exception as e:
-                    logger.error(f"Webhook: Error in command handler for '{command_part}': {e}", exc_info=True)
-                return
-        except IndexError:
-            if content_lower and content_lower in bot.handled_commands:
-                logger.info(f"Webhook: Handling command: {km.content!r}")
-                try:
-                    await bot.handled_commands[content_lower](bot, km)
-                except Exception as e:
-                    logger.error(f"Webhook: Error in command handler for '{content_lower}': {e}", exc_info=True)
-                return
-        
-        logger.debug(f"Webhook: Message '{km.content}' did not match any direct handlers or commands.")
+            logger.error(f"Webhook handler: Error processing message with KickBot._handle_chat_message: {e}", exc_info=True)
 
 # Example usage:
 if __name__ == "__main__":

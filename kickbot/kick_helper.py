@@ -90,13 +90,31 @@ def get_current_viewers(bot) -> int:
 def message_from_data(message: dict) -> KickMessage:
     """
     Return a KickMessage object from the raw message data, containing message and sender attributes.
-
-    :param message: Inbound message from websocket
+    
+    This function handles two types of message structures:
+    1. WebSocket messages: Have a nested 'data' field that contains the actual message
+    2. Webhook messages: Direct message structure without a nested 'data' field
+    
+    :param message: Inbound message from websocket or webhook
     :return: KickMessage object with message and sender attributes
     """
-    data = message.get('data')
+    # Check if this is a WebSocket message (has 'data' field)
+    if 'data' in message:
+        data = message.get('data')
+        # If data is a string (JSON), we need to parse it
+        if isinstance(data, str):
+            try:
+                import json
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise KickHelperException(f"Error parsing JSON data from response {message}")
+    else:
+        # This is likely a webhook message, use it directly
+        data = message
+        
     if data is None:
         raise KickHelperException(f"Error parsing message data from response {message}")
+    
     try:
         return KickMessage(data)
     except Exception as e:

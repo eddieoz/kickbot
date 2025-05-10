@@ -68,10 +68,12 @@ async def current_time(bot: KickBot, message: KickMessage):
 
 
 async def markov_chain(bot: KickBot, message: KickMessage):
-    """ Reply with the current UTC time """
+    """ Generate text using Markov chain algorithm """
     msg = message.content.split(' ')
-    msg.pop(0)
-    reply, ret = MarkovChain.generate(bot, msg)
+    msg.pop(0)  # Remove the command itself
+    
+    # Use the bot's generate method instead of directly calling MarkovChain.generate
+    reply, ret = bot.generate(msg)
 
     if 'gerard' in reply.casefold():
         try:

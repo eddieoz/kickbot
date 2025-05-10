@@ -139,6 +139,10 @@ class KickBot:
         #                           capability=["commands", "tags"],
         #                           live=True)
 
+        # Add message ID cache for deduplication
+        self.processed_message_ids = set()
+        self.max_cache_size = 1000  # Limit cache size to prevent memory issues
+
     def set_settings(self, settings: SettingsData):
         """Fill class instance attributes based on the settings file.
 
@@ -164,6 +168,50 @@ class KickBot:
         self.allow_generate_params = settings["AllowGenerateParams"]
         self.generate_commands = tuple(settings["GenerateCommands"])
         
+        # Initialize MarkovChain Database after settings are loaded
+        try:
+            self.db = Database(self.chan)
+            self.logger.info(f"MarkovChain Database initialized for channel: {self.chan}")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize MarkovChain Database: {e}")
+        
+        # Set up timers for MarkovChain functionality if enabled
+        if hasattr(self, 'help_message_timer') and self.help_message_timer > 0:
+            if self.help_message_timer < 300:
+                self.logger.warning("Value for \"HelpMessageTimer\" must be at least 300 seconds, or a negative number for no help messages.")
+            else:
+                try:
+                    self.help_timer = LoopingTimer(self.help_message_timer, self.send_help_message)
+                    self.help_timer.start()
+                    self.logger.info(f"Help message timer started with interval: {self.help_message_timer} seconds")
+                except Exception as e:
+                    self.logger.error(f"Failed to start help message timer: {e}")
+        
+        if hasattr(self, 'automatic_generation_timer') and self.automatic_generation_timer > 0:
+            if self.automatic_generation_timer < 30:
+                self.logger.warning("Value for \"AutomaticGenerationTimer\" must be at least 30 seconds, or a negative number for no automatic generations.")
+            else:
+                try:
+                    self.autogen_timer = LoopingTimer(self.automatic_generation_timer, self.send_automatic_generation_message)
+                    self.autogen_timer.start()
+                    self.logger.info(f"Automatic generation timer started with interval: {self.automatic_generation_timer} seconds")
+                except Exception as e:
+                    self.logger.error(f"Failed to start automatic generation timer: {e}")
+        
+        # Initialize TwitchWebsocket for MarkovChain if not already created
+        try:
+            self.ws = TwitchWebsocket(host=self.host, 
+                                     port=self.port,
+                                     chan=self.chan,
+                                     nick=self.nick,
+                                     auth=self.auth,
+                                     callback=MarkovChain.message_handler,
+                                     capability=["commands", "tags"],
+                                     live=True)
+            self.logger.info("TwitchWebsocket for MarkovChain initialized")
+        except Exception as e:
+            self.logger.error(f"Failed to initialize TwitchWebsocket for MarkovChain: {e}")
+            
         # Load Webhook settings
         self.webhook_enabled = settings.get("KickWebhookEnabled", False)
         self.webhook_path = settings.get("KickWebhookPath", "/kick/events")
@@ -267,11 +315,11 @@ class KickBot:
     def send_help_message(self) -> None:
         """Send a Help message to the connected chat, as long as the bot wasn't disabled."""
         if self._enabled:
-            logger.info("Help message sent.")
+            self.logger.info("Help message sent.")
             try:
-                self.ws.send_message("Learn how this bot generates sentences here: https://github.com/CubieDev/TwitchMarkovChain#how-it-works")
-            except socket.OSError as error:
-                logger.warning(f"[OSError: {error}] upon sending help message. Ignoring.")
+                asyncio.create_task(self.send_text("Learn how this bot generates sentences here: https://github.com/CubieDev/TwitchMarkovChain#how-it-works"))
+            except Exception as e:
+                self.logger.error(f"Error sending help message: {e}", exc_info=True)
     
     def send_automatic_generation_message(self) -> None:
         """Send an automatic generation message to the connected chat.
@@ -279,16 +327,15 @@ class KickBot:
         As long as the bot wasn't disabled, just like if someone typed "!g" in chat.
         """
         if self._enabled:
-            sentence, success = self.generate()
-            if success:
-                logger.info(sentence)
-                # Try to send a message. Just log a warning on fail
-                try:
-                    self.ws.send_message(sentence)
-                except socket.OSError as error:
-                    logger.warning(f"[OSError: {error}] upon sending automatic generation message. Ignoring.")
-            else:
-                logger.info("Attempted to output automatic generation message, but there is not enough learned information yet.")
+            try:
+                sentence, success = self.generate()
+                if success:
+                    self.logger.info(f"Auto-generating: {sentence}")
+                    asyncio.create_task(self.send_text(sentence))
+                else:
+                    self.logger.info("Attempted to output automatic generation message, but there is not enough learned information yet.")
+            except Exception as e:
+                self.logger.error(f"Error sending automatic generation message: {e}", exc_info=True)
 
     def write_blacklist(self, blacklist: List[str]) -> None:
         """Write blacklist.txt given a list of banned words.
@@ -783,6 +830,30 @@ class KickBot:
                     event_type = received_message_data.get("event")
                     data = received_message_data.get("data")
 
+                    # Check for 'gerard' in message content for ChatMessageEvent
+                    if event_type == "App\\Events\\ChatMessageEvent" and data:
+                        try:
+                            if isinstance(data, str):
+                                data_obj = json.loads(data)
+                            else:
+                                data_obj = data
+                                
+                            message_content = str(data_obj.get('content', ''))
+                            sender_username = str(data_obj.get('sender', {}).get('username', ''))
+                            
+                            if 'gerard' in message_content.casefold():
+                                try:
+                                    req = requests.post("http://192.168.0.30:7862/update_chat", 
+                                                       json={'nickname': sender_username, 'context': message_content})
+                                    if req.status_code == 200:
+                                        self.logger.info("Context updated successfully.")
+                                    else:
+                                        self.logger.warning(f"Failed to update context: {req.status_code}")
+                                except Exception as e:
+                                    self.logger.error(f"Error updating context: {e}")
+                        except Exception as e:
+                            self.logger.error(f"Error processing 'gerard' detection: {e}")
+
                     # This data is now the Python dict from json.loads in _recv, or from direct assignment if not string initially.
                     # The initial string check and json.loads for 'data' at this level can be simplified or removed
                     # if _recv guarantees 'data' (when part of received_message_data) is already loaded from JSON string, 
@@ -937,3 +1008,176 @@ class KickBot:
         self.logger.info("WebSocket connection established (pusher:connection_established event).")
         # Optionally, parse the message or update state if needed.
         pass
+
+    async def _handle_chat_message(self, inbound_message: dict) -> None:
+        """
+        Handles incoming messages from both websocket and webhook, 
+        checks if the message.content is in dict of handled commands / messages.
+
+        :param inbound_message: Raw inbound message from socket or webhook
+        """
+        try:
+            message: KickMessage = message_from_data(inbound_message)
+            
+            # Skip if this is a message from the bot itself
+            if message.sender.username == self.client.bot_name:
+                return
+                
+            # Check for message ID deduplication
+            message_id = message.id
+            if message_id:
+                if message_id in self.processed_message_ids:
+                    self.logger.debug(f"Skipping duplicate message with ID: {message_id}")
+                    return
+                
+                # Add to processed IDs
+                self.processed_message_ids.add(message_id)
+                
+                # Trim cache if it gets too large
+                if len(self.processed_message_ids) > self.max_cache_size:
+                    # Remove oldest entries (convert to list, slice, convert back to set)
+                    self.processed_message_ids = set(list(self.processed_message_ids)[self.max_cache_size // 2:])
+
+            content = message.content.casefold()
+            command = message.args[0].casefold() if message.args and len(message.args) > 0 else ""
+            self.logger.debug(f"New Message from {message.sender.username} | MESSAGE: {content!r}")
+            
+            # Process with Markov Chain if enabled
+            if hasattr(self, 'db') and self._enabled:
+                try:
+                    MarkovChain.message_handler(self, content)
+                except Exception as e:
+                    self.logger.error(f"Error processing message with MarkovChain: {e}", exc_info=True)
+                    
+            # Check if the message is a gifted subscription message and sent by 'Kicklet'
+            if (message.sender.username == "Kicklet" and 
+                "thank you" in content and 
+                "for the gifted" in content and 
+                "subscriptions" in content):
+                try:
+                    # Extract the gifter username and the number of subscriptions
+                    parts = content.split()
+                    gifter = parts[2].rstrip(',')  # The gifter's username is the third word, after "Thank you,"
+                    amount_index = parts.index("gifted") + 1  # The amount is the word after "gifted"
+                    amount = int(parts[amount_index])  # Convert the amount to an integer
+                    
+                    # Handle the gifted subscriptions
+                    if hasattr(self, '_handle_gifted_subscriptions'):
+                        await self._handle_gifted_subscriptions(gifter, amount)
+                    else:
+                        self.logger.warning("_handle_gifted_subscriptions method not available")
+                except (IndexError, ValueError) as e:
+                    self.logger.error(f"Error parsing gifted subscription message: {e}")
+
+            # Check for direct message matches
+            if content in self.handled_messages:
+                message_func = self.handled_messages[content]
+                await message_func(self, message)
+                self.logger.info(f"Handled Message: {content!r} from user {message.sender.username} ({message.sender.user_id})")
+                return
+
+            # Check for commands
+            if command and command in self.handled_commands:
+                command_func = self.handled_commands[command]
+                await command_func(self, message)
+                self.logger.info(f"Handled Command: {command!r} from user {message.sender.username} ({message.sender.user_id})")
+                return
+
+            # Check for partial message matches
+            for msg in self.handled_messages:
+                # If message text contains a registered message pattern, call its handler
+                if msg in content:
+                    message_func = self.handled_messages[msg]
+                    await message_func(self, message)
+                    self.logger.info(f"Handled Partial Message Match: {content!r} (matched: {msg!r}) from user {message.sender.username} ({message.sender.user_id})")
+                    return
+
+            self.logger.debug(f"No handler found for message: {content}")
+
+        except Exception as e:
+            self.logger.error(f"Error in _handle_chat_message: {e}", exc_info=True)
+
+    async def _handle_gifted_subscriptions(self, gifter: str, amount: int) -> None:
+        """
+        Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
+
+        :param gifter: Username of the gifter
+        :param amount: Number of subscriptions gifted
+        """
+        if gifter == "Anonymous":
+            self.logger.info(f"Anonymous gifter sent {amount} subscriptions - no points awarded")
+            return
+            
+        try:
+            if 'GiftBlokitos' in settings and settings['GiftBlokitos'] != 0:
+                blokitos = amount * settings['GiftBlokitos']
+                message = f'!subgift_add {gifter} {blokitos}'
+                r = send_message_in_chat(self, message)
+                if r.status_code != 200:
+                    self.logger.error(f"Error sending message for gift subs: {r.status_code} - {r.text}")
+                else:
+                    self.logger.info(f"Added {blokitos} to user {gifter} for {amount} sub_gifts")
+        except Exception as e:
+            self.logger.error(f"Error handling gifted subscriptions: {e}", exc_info=True)
+
+    def generate(self, msg: list = None) -> tuple:
+        """Generate a Markov chain message.
+
+        Args:
+            msg (list, optional): Starting word(s) for generation. Defaults to None.
+
+        Returns:
+            tuple: (sentence, success_bool)
+        """
+        try:
+            return MarkovChain.generate(self, msg)
+        except Exception as e:
+            self.logger.error(f"Error in generate: {e}", exc_info=True)
+            return "Error generating message", False
+
+    async def _handle_ban(self, inbound_message: dict) -> None:
+        """
+        Handles incoming ban events, from the banned user's account and logs the event.
+        
+        :param inbound_message: Raw inbound message from socket
+        """
+        try:
+            if isinstance(inbound_message, str):
+                data = json.loads(inbound_message)
+            else:
+                data = inbound_message
+            
+            expired = data.get('expires_at')
+            user = data.get('user', {})
+            banned_by = data.get('banned_by', {})
+            
+            user_username = user.get('username', 'unknown')
+            ban_by_username = banned_by.get('username', 'unknown')
+            
+            if expired:
+                # Temporary ban
+                message = f'#tabanido @{user_username}'
+                try:
+                    r = send_message_in_chat(self, message)
+                    if r.status_code != 200:
+                        self.logger.error(f"An error occurred while sending ban message {message!r}")
+                    
+                    await self.send_alert(
+                        'https://media3.giphy.com/media/up8eu7XYylMrPmLwY4/giphy.gif',
+                        'https://www.myinstants.com/media/sounds/cartoon-hammer.mp3', 
+                        message.replace('#', ''), 
+                        message.replace('#', '')
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error in ban message or alert: {e}")
+            else:
+                # Permanent ban
+                message = f'#AVADAA_KEDAVRAA @{user_username}'
+                try:
+                    r = send_message_in_chat(self, message)
+                except Exception as e:
+                    self.logger.error(f"Error in permanent ban message: {e}")
+            
+            self.logger.info(f"Ban user {user_username} by {ban_by_username}")
+        except Exception as e:
+            self.logger.error(f"Error handling ban event: {e}", exc_info=True)
