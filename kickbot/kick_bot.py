@@ -144,6 +144,8 @@ class KickBot:
         self.processed_message_ids = set()
         self.max_cache_size = 1000  # Limit cache size to prevent memory issues
 
+        self.is_live: bool = False  # Track if the stream is live
+
     def set_settings(self, settings: SettingsData):
         """Fill class instance attributes based on the settings file.
 

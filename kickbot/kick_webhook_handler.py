@@ -157,6 +157,7 @@ class KickWebhookHandler:
         self.register_event_handler("channel.subscription.gifts", self.handle_gifted_subscription_event)
         self.register_event_handler("channel.subscription.renewal", self.handle_subscription_renewal_event)
         self.register_event_handler("chat.message.sent", self.handle_chat_message_event)
+        self.register_event_handler("livestream.status.updated", self.handle_livestream_status_updated)
     
     def run_server(self):
         """Start the HTTP server to listen for webhook events."""
@@ -653,6 +654,17 @@ class KickWebhookHandler:
             logger.debug(f"Webhook handler: Successfully processed message with KickBot._handle_chat_message")
         except Exception as e:
             logger.error(f"Webhook handler: Error processing message with KickBot._handle_chat_message: {e}", exc_info=True)
+
+    async def handle_livestream_status_updated(self, event):
+        """
+        Handle the livestream.status.updated webhook event to update the bot's is_live flag.
+        """
+        is_live = getattr(event, 'is_live', None)
+        if is_live is not None:
+            self.kick_bot_instance.is_live = is_live
+            logger.info(f"[Webhook] Updated bot.is_live to {is_live} from livestream.status.updated event.")
+        else:
+            logger.warning("[Webhook] livestream.status.updated event received without is_live field.")
 
     async def health_check(self, request: web.Request) -> web.Response:
         """

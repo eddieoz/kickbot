@@ -131,12 +131,14 @@ async def ban_by_bot_message(bot: KickBot, message: KickMessage):
             bot.moderator.permaban(username)
 
 async def send_links_in_chat(bot: KickBot):
-    """ Timed event to send social links every 30 mins """
+    if not getattr(bot, "is_live", False):
+        return
     links = "Youtube: https://youtube.com/eddieoz\n\nKick: https://kick.com/eddieoz\n\nSite: https://eddieoz.com"
     await bot.send_text(links)
 
 async def send_links_livecoins(bot: KickBot):
-    """ Timed event to send social links every 30 mins """
+    if not getattr(bot, "is_live", False):
+        return
     links = "Estamos participando da votação da Livecoins! Vote em nós! https://form.respondi.app/pjSDK4qg "
     await bot.send_text(links)
 
@@ -165,13 +167,15 @@ async def night_greeting(bot: KickBot, message: KickMessage):
     await bot.reply_text(message, reply)
 
 async def say_hello(bot: KickBot):
-    # randomize reply among a list of replies
+    if not getattr(bot, "is_live", False):
+        return
     replies = ["Oi!", "Hello!", "Salut!", "Hallo!", "Hola!", "Ciao!", "Olá!", "Hi!", "Oi oi oi!", "Oi oi!", "Oi oi oi oi oi!"]
     reply = f"{random.choice(replies)}"
     await bot.send_text(reply)
 
 async def im_back(bot: KickBot):
-    # randomize reply among a list of replies
+    if not getattr(bot, "is_live", False):
+        return
     replies = ["Sr. Botoshi online e se apresentando para o trabalho! 😎"]
     reply = f"{random.choice(replies)}"
     await bot.send_text(reply)
