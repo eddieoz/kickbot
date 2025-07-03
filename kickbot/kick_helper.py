@@ -7,62 +7,121 @@ from .kick_message import KickMessage
 logger = logging.getLogger(__name__)
 
 
-def get_streamer_info(bot) -> None:
+async def get_streamer_info(bot) -> None:
     """
     Retrieve dictionary containing all info related to the streamer and set bot attributes accordingly.
 
-    :param bot: Main KickBor
+    :param bot: Main KickBot
     """
     url = f"https://kick.com/api/v2/channels/{bot.streamer_slug}"
-    response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=BASE_HEADERS)
-    status = response.status_code
-    match status:
-        case 403 | 429:
-            raise KickHelperException(f"Error retrieving streamer info. Blocked By cloudflare. ({status})")
-        case 404:
-            raise KickHelperException(f"Streamer info for '{bot.streamer_name}' not found. (404 error) ")
-    try:
-        data = response.json()
-    except Exception as e:
-        logger.error(f"Failed to parse streamer info JSON: {e}")
-        raise KickHelperException(f"Failed to parse streamer info JSON: {e}")
+    
+    if bot.client and hasattr(bot.client, 'scraper'):
+        # Use traditional client method
+        response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=BASE_HEADERS)
+        status = response.status_code
+        match status:
+            case 403 | 429:
+                raise KickHelperException(f"Error retrieving streamer info. Blocked By cloudflare. ({status})")
+            case 404:
+                raise KickHelperException(f"Streamer info for '{bot.streamer_name}' not found. (404 error) ")
+        try:
+            data = response.json()
+        except Exception as e:
+            logger.error(f"Failed to parse streamer info JSON: {e}")
+            raise KickHelperException(f"Failed to parse streamer info JSON: {e}")
+    else:
+        # Use OAuth/aiohttp method
+        async with bot.http_session.get(url, headers=BASE_HEADERS) as response:
+            status = response.status
+            if status in [403, 429]:
+                raise KickHelperException(f"Error retrieving streamer info. Blocked By cloudflare. ({status})")
+            elif status == 404:
+                raise KickHelperException(f"Streamer info for '{bot.streamer_name}' not found. (404 error) ")
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse streamer info JSON: {e}")
+                raise KickHelperException(f"Failed to parse streamer info JSON: {e}")
+    
     bot.streamer_info = data
     bot.chatroom_info = data.get('chatroom')
     bot.chatroom_id = bot.chatroom_info.get('id')
 
 
-def get_chatroom_settings(bot) -> None:
+async def get_chatroom_settings(bot) -> None:
     """
     Retrieve chatroom settings for the streamer and set bot.chatroom_settings
 
     :param bot: Main KickBot
     """
     url = f"https://kick.com/api/internal/v1/channels/{bot.streamer_slug}/chatroom/settings"
-    response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=BASE_HEADERS)
-    if response.status_code != 200:
-        raise KickHelperException(f"Error retrieving chatroom settings. Response Status: {response.status_code}")
-    try:
-        data = response.json()
-    except Exception as e:
-        logger.error(f"Failed to parse chatroom settings JSON: {e}")
-        raise KickHelperException(f"Failed to parse chatroom settings JSON: {e}")
+    
+    if bot.client and hasattr(bot.client, 'scraper'):
+        # Use traditional client method
+        response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=BASE_HEADERS)
+        if response.status_code != 200:
+            raise KickHelperException(f"Error retrieving chatroom settings. Response Status: {response.status_code}")
+        try:
+            data = response.json()
+        except Exception as e:
+            logger.error(f"Failed to parse chatroom settings JSON: {e}")
+            raise KickHelperException(f"Failed to parse chatroom settings JSON: {e}")
+    else:
+        # Use OAuth/aiohttp method
+        async with bot.http_session.get(url, headers=BASE_HEADERS) as response:
+            if response.status != 200:
+                raise KickHelperException(f"Error retrieving chatroom settings. Response Status: {response.status}")
+            try:
+                data = await response.json()
+            except Exception as e:
+                logger.error(f"Failed to parse chatroom settings JSON: {e}")
+                raise KickHelperException(f"Failed to parse chatroom settings JSON: {e}")
+    
     bot.chatroom_settings = data.get('data').get('settings')
 
 
-def get_bot_settings(bot) -> None:
+async def get_bot_settings(bot) -> None:
     """
     Retrieve the bot settings for the stream. Checks if bot has mod / admin status. Sets attributes accordingly.
 
     :param bot: Main KickBot
     """
     url = f"https://kick.com/api/v2/channels/{bot.streamer_slug}/me"
-    headers = BASE_HEADERS.copy()
-    headers['Authorization'] = "Bearer " + bot.client.auth_token
-    headers['X-Xsrf-Token'] = bot.client.xsrf
-    response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=headers)
-    if response.status_code != 200:
-        raise KickHelperException(f"Error retrieving bot settings. Response Status: {response.status_code}")
-    data = response.json()
+    
+    if bot.client and hasattr(bot.client, 'scraper'):
+        # Use traditional client method
+        headers = BASE_HEADERS.copy()
+        headers['Authorization'] = "Bearer " + bot.client.auth_token
+        headers['X-Xsrf-Token'] = bot.client.xsrf
+        response = bot.client.scraper.get(url, cookies=bot.client.cookies, headers=headers)
+        if response.status_code != 200:
+            raise KickHelperException(f"Error retrieving bot settings. Response Status: {response.status_code}")
+        data = response.json()
+    else:
+        # Use OAuth/aiohttp method
+        headers = BASE_HEADERS.copy()
+        if bot.auth_manager:
+            try:
+                token = await bot.auth_manager.get_valid_token()
+                headers['Authorization'] = f"Bearer {token}"
+            except Exception as e:
+                logger.warning(f"Could not get OAuth token for bot settings: {e}")
+                # Set default values if we can't get bot settings
+                bot.bot_settings = {}
+                bot.is_mod = False
+                bot.is_super_admin = False
+                return
+        
+        async with bot.http_session.get(url, headers=headers) as response:
+            if response.status != 200:
+                logger.warning(f"Error retrieving bot settings. Response Status: {response.status}")
+                # Set default values if we can't get bot settings
+                bot.bot_settings = {}
+                bot.is_mod = False
+                bot.is_super_admin = False
+                return
+            data = await response.json()
+    
     bot.bot_settings = data
     bot.is_mod = data.get('is_moderator')
     bot.is_super_admin = data.get('is_super_admin')

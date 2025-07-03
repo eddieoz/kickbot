@@ -18,6 +18,11 @@ services:
       
     ports:
       - "5009:8080" # Host:Container
+    
+    working_dir: /app
+    
+    # Start the OAuth webhook server automatically with Conda environment
+    command: bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate kickbot && python oauth_webhook_server.py"
       
     # Keep stdin open and allocate a TTY
     # This is essential for attaching to the container or using 'docker exec' with an interactive shell.

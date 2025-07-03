@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import aiohttp
 from typing import List, Dict, Any, Optional
 
 # Use a forward reference for KickAuthManager if it's in a different module and imported later
@@ -14,13 +15,13 @@ class KickEventManager:
     """
     Manages subscriptions to Kick API events via webhooks.
     """
-    def __init__(self, auth_manager: 'KickAuthManager', client: KickClient, broadcaster_user_id: int):
+    def __init__(self, auth_manager: 'KickAuthManager', client: Optional[KickClient], broadcaster_user_id: int):
         """
         Initializes the KickEventManager.
 
         Args:
             auth_manager: An instance of KickAuthManager to obtain access tokens.
-            client: An instance of KickClient providing an aiohttp.ClientSession.
+            client: An optional instance of KickClient providing an aiohttp.ClientSession.
             broadcaster_user_id: The user ID of the broadcaster for event subscriptions.
         """
         self.auth_manager = auth_manager
@@ -30,6 +31,19 @@ class KickEventManager:
         self.active_subscription_ids: List[str] = [] 
         # Direct auth token for fallback authentication
         self.direct_auth_token: str = None
+        # HTTP session for OAuth-only mode
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """Get HTTP session for API calls"""
+        if self.client and hasattr(self.client, 'session') and self.client.session:
+            return self.client.session
+        elif self._session:
+            return self._session
+        else:
+            # Create a new session for OAuth-only mode
+            self._session = aiohttp.ClientSession()
+            return self._session
 
     async def _get_headers(self) -> Dict[str, str]:
         """Helper to get authenticated headers for API calls."""
@@ -76,7 +90,8 @@ class KickEventManager:
                 # so calling code knows we failed due to auth, not API error
                 return []
                 
-            async with self.client.session.get(url, headers=headers) as response:
+            session = await self._get_session()
+            async with session.get(url, headers=headers) as response:
                 response_data = await response.json()
                 if response.status == 200:
                     logger.info("Successfully listed event subscriptions.")
@@ -112,11 +127,13 @@ class KickEventManager:
         payload = {
             "broadcaster_user_id": self.broadcaster_user_id,
             "events": events_to_subscribe,
-            "method": "webhook" 
+            "method": "webhook",
+            "webhook_url": "https://webhook.botoshi.sats4.life/events"
         }
         try:
             headers = await self._get_headers()
-            async with self.client.session.post(url, headers=headers, json=payload) as response:
+            session = await self._get_session()
+            async with session.post(url, headers=headers, json=payload) as response:
                 response_data = await response.json()
                 if response.status == 200: # Kick docs indicate 200 OK for successful POST
                     successful_subscriptions = []
@@ -157,7 +174,8 @@ class KickEventManager:
         
         try:
             headers = await self._get_headers()
-            async with self.client.session.delete(url, headers=headers, params=params) as response:
+            session = await self._get_session()
+            async with session.delete(url, headers=headers, params=params) as response:
                 if response.status == 204: # No Content on successful deletion
                     logger.info(f"Successfully unsubscribed from events: {subscription_ids}")
                     self.active_subscription_ids = [sid for sid in self.active_subscription_ids if sid not in subscription_ids]

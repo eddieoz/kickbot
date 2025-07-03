@@ -2,6 +2,8 @@ import requests
 import logging
 import tls_client
 import aiohttp
+import time
+import random
 
 from typing import Optional
 from requests.cookies import RequestsCookieJar
@@ -54,9 +56,22 @@ class KickClient:
             raise KickAuthException("Error when parsing token fields while attempting login.")
 
         login_payload = self._base_login_payload(name_field_name, token_field, login_token)
-        login_response = self._send_login_request(login_payload)
-        login_data = login_response.json()
+        login_response = self._send_login_request_with_retry(login_payload)
         login_status = login_response.status_code
+        
+        # Debug response before parsing JSON
+        logger.debug(f"Login response status: {login_status}")
+        logger.debug(f"Login response headers: {login_response.headers}")
+        logger.debug(f"Login response text: {login_response.text}")
+        
+        # Handle empty or non-JSON responses
+        if not login_response.text.strip():
+            raise KickAuthException(f"Empty response from login endpoint. Status: {login_status}")
+        
+        try:
+            login_data = login_response.json()
+        except Exception as e:
+            raise KickAuthException(f"Failed to parse login response as JSON. Status: {login_status}, Response: {login_response.text[:500]}, Error: {e}")
         match login_status:
             case 200:
                 self.auth_token = login_data.get('token')
@@ -132,7 +147,48 @@ class KickClient:
         url = 'https://kick.com/mobile/login'
         headers = BASE_HEADERS.copy()
         headers['X-Xsrf-Token'] = self.xsrf
-        return self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        return self.scraper.post(url, data=payload, cookies=self.cookies, headers=headers)
+
+    def _send_login_request_with_retry(self, payload: dict, max_retries: int = 3) -> requests.Response:
+        """
+        Perform the login post request with retry logic for rate limiting.
+        
+        :param payload: Login payload containing user info and tokens.
+        :param max_retries: Maximum number of retry attempts
+        :return: Login post request response
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                response = self._send_login_request(payload)
+                
+                # If we get 429 (rate limited), wait and retry
+                if response.status_code == 429 and attempt < max_retries:
+                    # Extract retry-after header if present
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        wait_time = int(retry_after)
+                    else:
+                        # Exponential backoff with jitter
+                        wait_time = (2 ** attempt) + random.uniform(0, 1)
+                    
+                    logger.warning(f"Rate limited (429), waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
+                    time.sleep(wait_time)
+                    continue
+                
+                return response
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    wait_time = (2 ** attempt) + random.uniform(0, 1)
+                    logger.warning(f"Login request failed: {e}, retrying in {wait_time} seconds")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise
+        
+        # If we get here, all retries failed
+        raise KickAuthException(f"Login failed after {max_retries} retries")
 
     @staticmethod
     def _get_2fa_code() -> str:
@@ -150,7 +206,8 @@ class KickClient:
         url = 'https://kick.com/mobile/login'
         headers = BASE_HEADERS.copy()
         headers['X-Xsrf-Token'] = self.xsrf
-        response = self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        response = self.scraper.post(url, data=payload, cookies=self.cookies, headers=headers)
         
         if response.status_code == 200:
             try:

@@ -310,11 +310,12 @@ async def send_alert(img, audio, text, tts):
             print(f'Error sending alert: {e}')
 
 async def main():
-    USERBOT_EMAIL = settings['KickEmail']
-    USERBOT_PASS = settings['KickPass']
+    USERBOT_EMAIL = settings.get('KickEmail')
+    USERBOT_PASS = settings.get('KickPass')
     STREAMER = settings['KickStreamer']
 
-    bot = KickBot(USERBOT_EMAIL, USERBOT_PASS)
+    # Use OAuth authentication instead of user/pass to avoid rate limiting
+    bot = KickBot(use_oauth=True)
     bot.set_settings(settings)
     await bot.set_streamer(STREAMER)
 
