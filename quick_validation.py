@@ -43,12 +43,15 @@ async def quick_validation():
         try:
             # Just check if the endpoint exists by sending a HEAD request
             async with session.head(f"{WEBHOOK_URL}/callback", timeout=5) as response:
-                # OAuth endpoint exists if it doesn't return 404
-                if response.status != 404:
-                    print(f"   ✅ OAuth endpoint accessible (responds to requests)")
+                # OAuth endpoint should accept requests (200, 405, 400 are all valid - not 404)
+                if response.status in [200, 405, 400]:
+                    print(f"   ✅ OAuth endpoint accessible (status: {response.status})")
                     tests_passed += 1
-                else:
+                elif response.status == 404:
                     print(f"   ❌ OAuth endpoint not found (404)")
+                else:
+                    print(f"   ✅ OAuth endpoint accessible (status: {response.status})")
+                    tests_passed += 1
         except Exception as e:
             print(f"   ❌ OAuth endpoint not accessible: {e}")
         
