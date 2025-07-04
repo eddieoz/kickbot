@@ -13,6 +13,7 @@ from aiohttp import web
 from urllib.parse import parse_qs, quote_plus
 import logging
 import json
+from datetime import datetime
 import aiohttp
 from typing import Optional, Dict, Any
 
@@ -389,7 +390,17 @@ async def handle_oauth_callback(request):
 
 async def handle_health(request):
     """Simple health check endpoint"""
-    return web.Response(text="OK", status=200)
+    health_data = {
+        "status": "ok",
+        "service": "Sr_Botoshi Webhook Server",
+        "timestamp": datetime.utcnow().isoformat(),
+        "endpoints": {
+            "oauth": "/callback",
+            "events": "/events", 
+            "health": "/health"
+        }
+    }
+    return web.json_response(health_data, status=200)
 
 async def handle_kick_events(request):
     """Handle Kick API webhook events with signature verification"""
