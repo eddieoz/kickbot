@@ -207,6 +207,7 @@ def message_from_data(message: dict) -> KickMessage:
 def send_message_in_chat(bot, message: str) -> requests.Response:
     """
     Send a message in a chatroom. Uses v1 API, was having csrf issues using v2 API (code 419).
+    DEPRECATED: Use send_message_in_chat_async for OAuth-based webhook bots.
 
     :param bot: Main KickBot
     :param message: Message to send in the chatroom
@@ -221,9 +222,59 @@ def send_message_in_chat(bot, message: str) -> requests.Response:
     return bot.client.scraper.post(url, json=payload, cookies=bot.client.cookies, headers=headers)
 
 
+async def send_message_in_chat_async(bot, message: str) -> dict:
+    """
+    Send a message in a chatroom using OAuth authentication and new Chat API.
+    
+    :param bot: Main KickBot with OAuth authentication
+    :param message: Message to send in the chatroom
+    :return: Response JSON from the Chat API
+    :raises: KickHelperException if sending fails
+    """
+    try:
+        # Get OAuth token
+        if bot.auth_manager:
+            token = await bot.auth_manager.get_valid_token()
+        elif hasattr(bot.client, 'auth_token') and bot.client.auth_token:
+            token = bot.client.auth_token
+        else:
+            raise KickHelperException("No valid authentication token available")
+        
+        # New Chat API endpoint
+        url = "https://api.kick.com/public/v1/chat"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        payload = {
+            "content": message,
+            "type": "bot"  # Send as bot type since we're using OAuth
+        }
+        
+        # Use aiohttp session for async request
+        async with bot.http_session.post(url, json=payload, headers=headers) as response:
+            response_data = await response.json()
+            
+            if response.status == 200:
+                logger.info(f"✅ Message sent successfully: {message[:50]}...")
+                return response_data
+            else:
+                error_msg = f"Failed to send message. Status: {response.status}, Response: {response_data}"
+                logger.error(error_msg)
+                raise KickHelperException(error_msg)
+                
+    except Exception as e:
+        logger.error(f"Error sending message '{message}': {e}")
+        raise KickHelperException(f"Failed to send message: {e}")
+
+
 def send_reply_in_chat(bot, message: KickMessage, reply_message: str) -> requests.Response:
     """
     Reply to a users message.
+    DEPRECATED: Use send_reply_in_chat_async for OAuth-based webhook bots.
 
     :param bot: KickBot object containing streamer, and bot info
     :param message: Original message to reply
@@ -249,6 +300,57 @@ def send_reply_in_chat(bot, message: KickMessage, reply_message: str) -> request
         }
     }
     return bot.client.scraper.post(url, json=payload, cookies=bot.client.cookies, headers=headers)
+
+
+async def send_reply_in_chat_async(bot, message: KickMessage, reply_message: str) -> dict:
+    """
+    Reply to a user's message using OAuth authentication and new Chat API.
+    
+    :param bot: Main KickBot with OAuth authentication
+    :param message: Original message to reply to
+    :param reply_message: Reply message content
+    :return: Response JSON from the Chat API
+    :raises: KickHelperException if sending fails
+    """
+    try:
+        # Get OAuth token
+        if bot.auth_manager:
+            token = await bot.auth_manager.get_valid_token()
+        elif hasattr(bot.client, 'auth_token') and bot.client.auth_token:
+            token = bot.client.auth_token
+        else:
+            raise KickHelperException("No valid authentication token available")
+        
+        # New Chat API endpoint
+        url = "https://api.kick.com/public/v1/chat"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        payload = {
+            "content": reply_message,
+            "type": "bot",  # Send as bot type since we're using OAuth
+            "reply_to_message_id": message.id  # Reply to the original message
+        }
+        
+        # Use aiohttp session for async request
+        async with bot.http_session.post(url, json=payload, headers=headers) as response:
+            response_data = await response.json()
+            
+            if response.status == 200:
+                logger.info(f"✅ Reply sent successfully to {message.sender.username}: {reply_message[:50]}...")
+                return response_data
+            else:
+                error_msg = f"Failed to send reply. Status: {response.status}, Response: {response_data}"
+                logger.error(error_msg)
+                raise KickHelperException(error_msg)
+                
+    except Exception as e:
+        logger.error(f"Error sending reply '{reply_message}' to {message.sender.username}: {e}")
+        raise KickHelperException(f"Failed to send reply: {e}")
 
 
 def get_ws_uri() -> str:

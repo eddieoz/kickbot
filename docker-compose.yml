@@ -21,8 +21,17 @@ services:
     
     working_dir: /app
     
-    # Start the OAuth webhook server automatically with Conda environment
-    command: bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate kickbot && python oauth_webhook_server.py"
+    # Start the unified KickBot with webhook server (Stories 1-5 implementation)
+    # This will:
+    # - Initialize OAuth authentication (Story 1)
+    # - Start unified webhook server on port 8080 (Story 2) 
+    # - Subscribe to Kick API events automatically (Story 5)
+    # - Process chat messages and commands via webhooks (not WebSocket)
+    # 
+    # Command line options:
+    # - Add --force-reauth to force re-authentication
+    # - Add --clear-tokens to clear tokens and exit
+    command: bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate kickbot && python botoshi.py"
       
     # Keep stdin open and allocate a TTY
     # This is essential for attaching to the container or using 'docker exec' with an interactive shell.

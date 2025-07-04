@@ -403,7 +403,17 @@ class KickBot:
                 
             except Exception as e:
                 self.logger.error(f"OAuth authentication failed: {e}")
-                raise KickBotException(f"OAuth authentication failed: {e}")
+                self.logger.info("🔄 Starting automatic OAuth authorization flow...")
+                
+                # Start automatic OAuth authorization
+                success = await self._handle_automatic_oauth_authorization()
+                if not success:
+                    raise KickBotException(f"OAuth authentication failed: {e}")
+                
+                # Try again after authorization
+                token = await self.auth_manager.get_valid_token()
+                self.logger.info("✅ OAuth authentication successful after automatic authorization.")
+                os.environ["KICK_AUTH_TOKEN"] = token
         else:
             # Use traditional username/password authentication
             if not self.client:
@@ -430,6 +440,80 @@ class KickBot:
             token_file_name = DEFAULT_TOKEN_FILE # from kick_auth_manager.py
             self.auth_manager = KickAuthManager(token_file=token_file_name)
             self.logger.info(f"KickAuthManager initialized with token file: {token_file_name}")
+
+    async def _handle_automatic_oauth_authorization(self) -> bool:
+        """
+        Handle automatic OAuth authorization when tokens are missing.
+        This method displays authorization instructions and waits for the user to complete OAuth.
+        """
+        try:
+            import webbrowser
+            
+            self.logger.info("🔐 Starting automatic OAuth authorization flow...")
+            
+            # Get authorization URL and code verifier using registered redirect URI
+            auth_url, code_verifier = self.auth_manager.get_authorization_url_with_fallback_redirect()
+            
+            # Store code verifier for webhook server to use
+            with open('oauth_verifier.txt', 'w') as f:
+                f.write(code_verifier)
+            self.logger.info("✅ Code verifier stored for webhook server")
+            
+            # Display authorization instructions
+            self.logger.info("="*60)
+            self.logger.info("🔐 OAUTH AUTHORIZATION REQUIRED")
+            self.logger.info("="*60)
+            self.logger.info("The bot needs to be authorized with your Kick account.")
+            self.logger.info("Please follow these steps:")
+            self.logger.info("")
+            self.logger.info(f"1. Open this URL in your web browser:")
+            self.logger.info(f"   {auth_url}")
+            self.logger.info("")
+            self.logger.info("2. Log in to Kick and authorize the application")
+            self.logger.info("3. You will be redirected to: https://webhook.botoshi.sats4.life/callback")
+            self.logger.info("4. The webhook server will automatically handle the callback")
+            self.logger.info("5. The bot will continue automatically after successful authorization")
+            self.logger.info("")
+            self.logger.info("="*60)
+            
+            # Try to open browser automatically
+            try:
+                webbrowser.open(auth_url)
+                self.logger.info("🌐 Browser opened automatically")
+            except Exception as e:
+                self.logger.warning(f"Could not open browser automatically: {e}")
+            
+            # Wait for webhook server to receive and process the OAuth callback
+            self.logger.info("⏱️  Waiting for OAuth callback via webhook server...")
+            
+            max_wait_time = 300  # 5 minutes
+            check_interval = 5   # 5 seconds
+            elapsed_time = 0
+            
+            while elapsed_time < max_wait_time:
+                # Check if tokens were created by reloading from file
+                try:
+                    # Force reload tokens from file
+                    self.auth_manager._load_tokens()
+                    token = await self.auth_manager.get_valid_token()
+                    self.logger.info("✅ OAuth tokens found - authorization successful!")
+                    return True
+                except:
+                    pass
+                
+                await asyncio.sleep(check_interval)
+                elapsed_time += check_interval
+                
+                if elapsed_time % 30 == 0:  # Log every 30 seconds
+                    remaining = max_wait_time - elapsed_time
+                    self.logger.info(f"⏱️  Still waiting for authorization... ({remaining}s remaining)")
+            
+            self.logger.error("❌ Authorization timeout - no tokens found within 5 minutes")
+            return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error in automatic OAuth authorization: {e}")
+            return False
 
     async def run(self):
         """Main async method to run bot components."""
@@ -817,9 +901,20 @@ class KickBot:
         if not type(message) == str or message.strip() == "":
             raise KickBotException("Invalid message. Must be a non empty string.")
         logger.debug(f"Sending message: {message!r}")
-        r = send_message_in_chat(self, message)
-        if r.status_code != 200:
-            raise KickBotException(f"An error occurred while sending message {message!r}")
+        
+        # Use OAuth-based async function for webhook bots
+        if self.use_oauth and hasattr(self, 'http_session') and self.http_session:
+            from .kick_helper import send_message_in_chat_async
+            try:
+                await send_message_in_chat_async(self, message)
+            except Exception as e:
+                raise KickBotException(f"An error occurred while sending message {message!r}") from e
+        else:
+            # Fallback to old sync method for backward compatibility
+            from .kick_helper import send_message_in_chat
+            r = send_message_in_chat(self, message)
+            if r.status_code != 200:
+                raise KickBotException(f"An error occurred while sending message {message!r}")
 
     async def reply_text(self, original_message: KickMessage, reply_message: str) -> None:
         """
@@ -849,12 +944,23 @@ class KickBot:
             raise KickBotException(f"Cannot reply: Sender has no username")
 
         logger.debug(f"Sending reply: {reply_message!r}")
-        try:
-            r = send_reply_in_chat(self, original_message, reply_message)
-            if r.status_code != 200:
-                raise KickBotException(f"An error occurred while sending reply {reply_message!r}")
-        except Exception as e:
-            raise KickBotException(f"An error occurred while sending reply {reply_message!r}") from e
+        
+        # Use OAuth-based async function for webhook bots
+        if self.use_oauth and hasattr(self, 'http_session') and self.http_session:
+            from .kick_helper import send_reply_in_chat_async
+            try:
+                await send_reply_in_chat_async(self, original_message, reply_message)
+            except Exception as e:
+                raise KickBotException(f"An error occurred while sending reply {reply_message!r}") from e
+        else:
+            # Fallback to old sync method for backward compatibility
+            from .kick_helper import send_reply_in_chat
+            try:
+                r = send_reply_in_chat(self, original_message, reply_message)
+                if r.status_code != 200:
+                    raise KickBotException(f"An error occurred while sending reply {reply_message!r}")
+            except Exception as e:
+                raise KickBotException(f"An error occurred while sending reply {reply_message!r}") from e
         
     async def send_alert(self, img, audio, text, tts):
         if (settings['Alerts']['Enable']):

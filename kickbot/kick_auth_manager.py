@@ -56,14 +56,15 @@ class KickAuthManager:
         self.client_id = client_id or KICK_CLIENT_ID
         self.client_secret = client_secret or KICK_CLIENT_SECRET
         self.redirect_uri = redirect_uri or KICK_REDIRECT_URI
-        # Ensure scopes is a list of strings for proper joining later
+        # Handle scopes - maintain backward compatibility while internally using list
         _scopes_input = scopes or KICK_SCOPES
+        self._original_scopes_input = _scopes_input  # Store original for backward compatibility
         if isinstance(_scopes_input, str):
-            self.scopes = _scopes_input.split()
+            self._scopes_list = _scopes_input.split()
         elif isinstance(_scopes_input, (list, tuple)):
-            self.scopes = list(_scopes_input)
+            self._scopes_list = list(_scopes_input)
         else:
-            self.scopes = [] # Default to empty list if type is unexpected
+            self._scopes_list = [] # Default to empty list if type is unexpected
             self.logger.warning(f"Unexpected type for scopes: {type(_scopes_input)}. Defaulting to empty scopes.")
 
         self.token_file_path = Path(token_file or DEFAULT_TOKEN_FILE).resolve() # Use pathlib for robust path handling
@@ -85,6 +86,23 @@ class KickAuthManager:
 
         self._load_tokens()
 
+    def get_authorization_url_with_fallback_redirect(self) -> tuple[str, str]:
+        """
+        Generate authorization URL using the same registered redirect URI.
+        The automatic OAuth flow will use the production callback endpoint.
+        Returns: (auth_url, code_verifier)
+        """
+        # Use the same registered redirect URI - no need to change it
+        # The automatic OAuth flow will handle the callback on the same endpoint
+        return self.get_authorization_url()
+
+    @property
+    def scopes(self):
+        """Return scopes in backward compatible format"""
+        if isinstance(self._original_scopes_input, str):
+            return self._original_scopes_input
+        return self._scopes_list
+
     def get_authorization_url(self) -> tuple[str, str]:
         """
         Generates the full authorization URL and the code_verifier.
@@ -97,7 +115,7 @@ class KickAuthManager:
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "response_type": "code",
-            "scope": " ".join(self.scopes),
+            "scope": " ".join(self._scopes_list),
             "code_challenge": code_challenge,
             "code_challenge_method": "S256",
             "state": self._generate_state()
@@ -219,7 +237,7 @@ class KickAuthManager:
             "refresh_token": self.refresh_token,
             "client_id": self.client_id,
             "client_secret": self.client_secret, # Potentially required for confidential clients
-            "scope": " ".join(self.scopes), # Often scopes are re-requested or re-asserted
+            "scope": " ".join(self._scopes_list), # Often scopes are re-requested or re-asserted
         }
         
         # Create a session
@@ -262,8 +280,12 @@ class KickAuthManager:
                 actual_error_code = error_details.get("error")
                 if response.status in [400, 401] and actual_error_code == "invalid_grant":
                     self.clear_tokens() # Clear all tokens as refresh failed, likely needs re-auth
+                
+                # Log the full error details for better debugging
+                self.logger.error(f"Full error details from token refresh: {error_details}")
+                
                 raise KickAuthManagerError(
-                    f"Error refreshing access token: {response.status} - {error_text}"
+                    f"Error refreshing access token: {response.status} - {error_text}. Details: {error_details}"
                 )
         except aiohttp.ClientError:
             # Handle network errors or other client-side issues
@@ -468,6 +490,25 @@ class KickAuthManager:
         # Implement the logic to generate a state parameter
         # This is a placeholder and should be replaced with the actual implementation
         return secrets.token_urlsafe(16)
+    
+    def _is_token_valid(self) -> bool:
+        """
+        Check if the current access token is valid (exists and not expired).
+        Uses TOKEN_EXPIRY_BUFFER to consider tokens expired before their actual expiry.
+        
+        Returns:
+            True if token is valid, False otherwise
+        """
+        if not self.access_token:
+            return False
+        
+        if not self.token_expires_at:
+            # If we don't know when it expires, assume it's still valid
+            return True
+        
+        # Check if token is expired (with buffer)
+        current_time = time.time()
+        return current_time < (self.token_expires_at - TOKEN_EXPIRY_BUFFER)
 
 # Example usage (for manual testing or a helper script):
 # if __name__ == "__main__":

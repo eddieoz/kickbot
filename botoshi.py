@@ -7,6 +7,9 @@ from time import sleep
 import requests
 from urllib.parse import urlencode, quote_plus
 import asyncio
+import argparse
+import sys
+from pathlib import Path
 
 from threading import Lock, Timer
 lock = Lock()
@@ -16,7 +19,6 @@ import aiohttp
 from kickbot import KickBot, KickMessage
 from datetime import datetime, timedelta
 
-import sys
 sys.path.append('utils/TwitchMarkovChain/')
 
 from utils.repeat_bot import repeat
@@ -310,6 +312,36 @@ async def send_alert(img, audio, text, tts):
             print(f'Error sending alert: {e}')
 
 async def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='KickBot - OAuth Webhook Bot')
+    parser.add_argument('--force-reauth', action='store_true', 
+                       help='Force re-authentication by clearing existing OAuth tokens')
+    parser.add_argument('--clear-tokens', action='store_true',
+                       help='Clear OAuth tokens and exit (useful for testing)')
+    args = parser.parse_args()
+    
+    # Handle force re-authentication
+    if args.force_reauth or args.clear_tokens:
+        token_file = Path('kickbot_tokens.json')
+        if token_file.exists():
+            token_file.unlink()
+            print(f"🗑️  Cleared OAuth tokens from {token_file}")
+        else:
+            print(f"ℹ️  No token file found at {token_file}")
+            
+        # Also clear any temporary OAuth files
+        for temp_file in ['oauth_verifier.txt', 'oauth_code.txt']:
+            temp_path = Path(temp_file)
+            if temp_path.exists():
+                temp_path.unlink()
+                print(f"🗑️  Cleared temporary file: {temp_file}")
+        
+        if args.clear_tokens:
+            print("✅ OAuth tokens cleared. Exiting.")
+            return
+        
+        print("🔄 Forcing re-authentication on next startup...")
+
     USERBOT_EMAIL = settings.get('KickEmail')
     USERBOT_PASS = settings.get('KickPass')
     STREAMER = settings['KickStreamer']
@@ -358,8 +390,6 @@ async def main():
     bot.add_command_handler('!laele', laele_alert)
     bot.add_command_handler('!chato', chato_alert)
 
-
-
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
     bot.add_message_handler('boa noite', night_greeting)
@@ -378,8 +408,131 @@ async def main():
     bot.add_timed_event(timedelta(minutes=15), say_hello)
     bot.add_timed_event(timedelta(seconds=1), im_back)
 
+    # Check if we should use webhook mode instead of traditional WebSocket
+    webhook_enabled = settings.get('KickWebhookEnabled', True)
+    disable_internal_webhook = settings.get('FeatureFlags', {}).get('DisableInternalWebhookServer', True)
     
-    await bot.run()
+    if webhook_enabled and disable_internal_webhook:
+        print("🚀 Starting KickBot with Unified Webhook Server (Story 2)")
+        print("📋 This replaces WebSocket polling with OAuth webhook events")
+        
+        # Import the unified webhook server
+        import oauth_webhook_server
+        
+        # Set the bot instance for webhook command processing
+        oauth_webhook_server.set_bot_instance(bot)
+        print("✅ Bot instance integrated with webhook server")
+        
+        # Initialize basic bot components for webhook mode
+        async with aiohttp.ClientSession() as session:
+            bot.http_session = session
+            print("✅ HTTP session created")
+            
+            # Start webhook server FIRST so it can handle OAuth callbacks
+            print("🌐 Starting unified webhook server on port 8080...")
+            
+            # Import and start the webhook server in background
+            webhook_server_task = asyncio.create_task(oauth_webhook_server.main())
+            print("✅ Webhook server started and ready to handle OAuth callbacks")
+            
+            # Add a small delay to ensure server is fully up
+            await asyncio.sleep(2)
+            
+            # Now initialize authentication (which may trigger OAuth flow)
+            try:
+                await bot._initialize_client_if_needed()
+                print("✅ Authentication initialized")
+            except Exception as e:
+                print(f"❌ Authentication failed: {e}")
+                print("⚠️  Webhook server remains running for OAuth callbacks")
+                # Let the webhook server continue running for OAuth callbacks
+                await webhook_server_task
+            
+            # Get streamer info for moderator functions
+            try:
+                from kickbot.kick_helper import get_streamer_info, get_chatroom_settings, get_bot_settings
+                await get_streamer_info(bot)
+                await get_chatroom_settings(bot)
+                await get_bot_settings(bot)
+                print("✅ Streamer info loaded")
+            except Exception as e:
+                print(f"⚠️  Using fallback streamer info: {e}")
+                # Use fallback info from settings
+                bot.streamer_info = {'id': 1139843, 'user': {'id': 1139843}}
+                bot.chatroom_info = {'id': int(settings.get('KickChatroom', 1164726))}
+                bot.chatroom_id = int(settings.get('KickChatroom', 1164726))
+                bot.is_mod = True
+            
+            # Initialize moderator if needed
+            if not bot.moderator and (bot.client or bot.auth_manager):
+                from kickbot.kick_moderator import Moderator
+                bot.moderator = Moderator(bot)
+                print("✅ Moderator initialized")
+            
+            # Initialize Event Manager and subscribe to events
+            if bot.auth_manager and bot.streamer_info and bot.streamer_info.get('id'):
+                from kickbot.kick_event_manager import KickEventManager
+                
+                broadcaster_id = bot.streamer_info['id']
+                webhook_url = os.environ.get('KICK_WEBHOOK_URL', 'https://webhook.botoshi.sats4.life/events')
+                bot.event_manager = KickEventManager(
+                    auth_manager=bot.auth_manager,
+                    client=bot.client,
+                    broadcaster_user_id=broadcaster_id,
+                    webhook_url=webhook_url
+                )
+                
+                # Set direct auth token for fallback if available
+                if hasattr(bot.client, 'auth_token') and bot.client.auth_token:
+                    bot.event_manager.direct_auth_token = bot.client.auth_token
+                    print("✅ Direct auth token set for event manager fallback")
+                
+                print(f"✅ Event manager initialized for broadcaster ID: {broadcaster_id}")
+                
+                # Subscribe to configured events
+                if bot.kick_events_to_subscribe:
+                    print(f"🔔 Subscribing to {len(bot.kick_events_to_subscribe)} event types...")
+                    try:
+                        # Retry logic for event subscription
+                        max_retries = 3
+                        retry_delay = 5
+                        success = False
+                        
+                        for attempt in range(1, max_retries + 1):
+                            print(f"📡 Event subscription attempt {attempt}/{max_retries}")
+                            success = await bot.event_manager.resubscribe_to_configured_events(bot.kick_events_to_subscribe)
+                            
+                            if success:
+                                print("✅ Successfully subscribed to all configured Kick events")
+                                print(f"📋 Subscribed events: {[event['name'] for event in bot.kick_events_to_subscribe]}")
+                                break
+                            elif attempt < max_retries:
+                                print(f"⚠️  Subscription attempt {attempt} failed, retrying in {retry_delay} seconds...")
+                                await asyncio.sleep(retry_delay)
+                                retry_delay *= 2
+                        
+                        if not success:
+                            print("❌ Failed to subscribe to events after all retries")
+                            print("⚠️  Bot will continue but may not receive webhook events")
+                            
+                    except Exception as e:
+                        print(f"❌ Error during event subscription: {e}")
+                        print("⚠️  Bot will continue but may not receive webhook events")
+                
+                # Set up periodic subscription verification
+                verification_interval = timedelta(minutes=30)
+                bot.add_timed_event(verification_interval, bot.verify_event_subscriptions)
+                print(f"✅ Subscription verification scheduled every {verification_interval}")
+            else:
+                print("⚠️  Event manager not initialized - missing auth manager or streamer info")
+            
+            print("🌐 Webhook server already running, waiting for events...")
+            
+            # Wait for the webhook server task that was started earlier
+            await webhook_server_task
+    else:
+        print("🔌 Starting KickBot with traditional WebSocket mode")
+        await bot.run()
 
 if __name__ == '__main__':
     asyncio.run(main())

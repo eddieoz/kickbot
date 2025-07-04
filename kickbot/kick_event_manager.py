@@ -15,7 +15,7 @@ class KickEventManager:
     """
     Manages subscriptions to Kick API events via webhooks.
     """
-    def __init__(self, auth_manager: 'KickAuthManager', client: Optional[KickClient], broadcaster_user_id: int):
+    def __init__(self, auth_manager: 'KickAuthManager', client: Optional[KickClient], broadcaster_user_id: int, webhook_url: str = None):
         """
         Initializes the KickEventManager.
 
@@ -23,10 +23,12 @@ class KickEventManager:
             auth_manager: An instance of KickAuthManager to obtain access tokens.
             client: An optional instance of KickClient providing an aiohttp.ClientSession.
             broadcaster_user_id: The user ID of the broadcaster for event subscriptions.
+            webhook_url: The webhook URL for event subscriptions. If None, uses default.
         """
         self.auth_manager = auth_manager
         self.client = client
         self.broadcaster_user_id = broadcaster_user_id
+        self.webhook_url = webhook_url or "https://webhook.botoshi.sats4.life/events"
         # Stores IDs of subscriptions successfully made or listed by this manager
         self.active_subscription_ids: List[str] = [] 
         # Direct auth token for fallback authentication
@@ -128,7 +130,7 @@ class KickEventManager:
             "broadcaster_user_id": self.broadcaster_user_id,
             "events": events_to_subscribe,
             "method": "webhook",
-            "webhook_url": "https://webhook.botoshi.sats4.life/events"
+            "webhook_url": self.webhook_url
         }
         try:
             headers = await self._get_headers()
