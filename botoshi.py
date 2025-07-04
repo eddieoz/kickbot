@@ -440,7 +440,7 @@ async def main():
             
             # Now initialize authentication (which may trigger OAuth flow)
             try:
-                await bot._initialize_client_if_needed()
+                await bot._initialize_oauth_authentication()
                 print("✅ Authentication initialized")
             except Exception as e:
                 print(f"❌ Authentication failed: {e}")
@@ -463,8 +463,8 @@ async def main():
                 bot.chatroom_id = int(settings.get('KickChatroom', 1164726))
                 bot.is_mod = True
             
-            # Initialize moderator if needed
-            if not bot.moderator and (bot.client or bot.auth_manager):
+            # Initialize moderator if needed (OAuth-only mode)
+            if not bot.moderator and bot.auth_manager:
                 from kickbot.kick_moderator import Moderator
                 bot.moderator = Moderator(bot)
                 print("✅ Moderator initialized")
@@ -477,15 +477,13 @@ async def main():
                 webhook_url = os.environ.get('KICK_WEBHOOK_URL', 'https://webhook.botoshi.sats4.life/events')
                 bot.event_manager = KickEventManager(
                     auth_manager=bot.auth_manager,
-                    client=bot.client,
+                    client=None,  # OAuth-only mode - no client needed
                     broadcaster_user_id=broadcaster_id,
                     webhook_url=webhook_url
                 )
                 
-                # Set direct auth token for fallback if available
-                if hasattr(bot.client, 'auth_token') and bot.client.auth_token:
-                    bot.event_manager.direct_auth_token = bot.client.auth_token
-                    print("✅ Direct auth token set for event manager fallback")
+                # No direct auth token in OAuth-only mode - using OAuth tokens instead
+                print("✅ Event manager initialized with OAuth authentication")
                 
                 print(f"✅ Event manager initialized for broadcaster ID: {broadcaster_id}")
                 
@@ -521,7 +519,11 @@ async def main():
                 
                 # Set up periodic subscription verification
                 verification_interval = timedelta(minutes=30)
-                bot.add_timed_event(verification_interval, bot.verify_event_subscriptions)
+                # Create a wrapper function that matches the timed event signature
+                async def subscription_verification_wrapper(bot_instance):
+                    await bot_instance.verify_event_subscriptions()
+                
+                bot.add_timed_event(verification_interval, subscription_verification_wrapper)
                 print(f"✅ Subscription verification scheduled every {verification_interval}")
             else:
                 print("⚠️  Event manager not initialized - missing auth manager or streamer info")

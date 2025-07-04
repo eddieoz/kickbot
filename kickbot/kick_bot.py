@@ -5,21 +5,21 @@ from urllib.parse import quote_plus, urlencode
 import aiohttp
 from aiohttp import web
 import requests
-import websockets
+# WebSocket polling removed - using webhooks only
 import os
 
 from datetime import timedelta
 from typing import Callable, Optional, Any, Coroutine, List, Dict
 
 from .constants import KickBotException
-from .kick_client import KickClient
+# KickClient not needed in OAuth-only mode
+# from .kick_client import KickClient
 from .kick_message import KickMessage
 from .kick_moderator import Moderator
 from .kick_webhook_handler import KickWebhookHandler
 from .kick_auth_manager import KickAuthManager, DEFAULT_TOKEN_FILE
 from .kick_event_manager import KickEventManager
 from .kick_helper import (
-    get_ws_uri,
     get_streamer_info,
     get_current_viewers,
     get_chatroom_settings,
@@ -48,7 +48,7 @@ class KickBot:
     """
     Main class for interacting with the Bot API.
     """
-    def __init__(self, username: str = None, password: str = None, use_oauth: bool = False) -> None:
+    def __init__(self, username: str = None, password: str = None, use_oauth: bool = True) -> None:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)  # FORCE DEBUG LEVEL FOR THIS LOGGER INSTANCE
         
@@ -67,23 +67,20 @@ class KickBot:
             self.logger.addHandler(handler)
             self.logger.propagate = False # Avoid duplicate messages from root logger if it also has handlers
 
-        # Store authentication preferences
-        self.use_oauth = use_oauth
-        self.username = username
-        self.password = password
+        # OAuth-only mode is now the default
+        self.use_oauth = True  # Force OAuth-only mode
+        if not use_oauth and (username or password):
+            self.logger.warning("Traditional username/password authentication is deprecated. Using OAuth-only mode.")
         
         # HTTP Session for all aiohttp requests - to be initialized in run()
         self.http_session: Optional[aiohttp.ClientSession] = None
 
-        # KickClient will be initialized after http_session is ready (only if not using OAuth)
-        self.client: Optional[KickClient] = None
-        # Auth Manager will be initialized after client is ready
+        # Auth Manager will be initialized in run() - no KickClient needed for OAuth-only mode
         self.auth_manager: Optional[KickAuthManager] = None
         # Event Manager will be initialized after auth_manager and broadcaster_id are ready
         self.event_manager: Optional[KickEventManager] = None
 
-        self._ws_uri = get_ws_uri()
-        self._socket_id: Optional[str] = None
+        # WebSocket polling removed - using webhooks only
         self.streamer_name: Optional[str] = None
         self.streamer_slug: Optional[str] = None
         self.streamer_info: Optional[dict] = None
@@ -385,55 +382,34 @@ class KickBot:
                  asyncio.run(self.shutdown())
             self.logger.info("Bot stopped.")
 
-    async def _initialize_client_if_needed(self):
-        # This method now assumes self.http_session is already set if called from run()
-        if self.use_oauth:
-            # Initialize OAuth authentication
-            if not self.auth_manager:
-                self.auth_manager = KickAuthManager()
-                self.logger.info("KickAuthManager initialized for OAuth authentication.")
+    async def _initialize_oauth_authentication(self):
+        """Initialize OAuth authentication - OAuth-only mode."""
+        # Initialize OAuth authentication
+        if not self.auth_manager:
+            self.auth_manager = KickAuthManager()
+            self.logger.info("KickAuthManager initialized for OAuth authentication.")
+        
+        # Try to get a valid token
+        try:
+            token = await self.auth_manager.get_valid_token()
+            self.logger.info("OAuth authentication successful.")
             
-            # Try to get a valid token
-            try:
-                token = await self.auth_manager.get_valid_token()
-                self.logger.info("OAuth authentication successful.")
-                
-                # Store auth token in environment for fallback auth mechanism
-                os.environ["KICK_AUTH_TOKEN"] = token
-                
-            except Exception as e:
-                self.logger.error(f"OAuth authentication failed: {e}")
-                self.logger.info("🔄 Starting automatic OAuth authorization flow...")
-                
-                # Start automatic OAuth authorization
-                success = await self._handle_automatic_oauth_authorization()
-                if not success:
-                    raise KickBotException(f"OAuth authentication failed: {e}")
-                
-                # Try again after authorization
-                token = await self.auth_manager.get_valid_token()
-                self.logger.info("✅ OAuth authentication successful after automatic authorization.")
-                os.environ["KICK_AUTH_TOKEN"] = token
-        else:
-            # Use traditional username/password authentication
-            if not self.client:
-                kick_email = self.username or settings.get("KickEmail")
-                kick_pass = self.password or settings.get("KickPass")
-                if not kick_email or not kick_pass:
-                    self.logger.error("Kick email or password not found in settings.json. Cannot initialize KickClient.")
-                    raise KickBotException("Kick credentials not found in settings.") # Raise to halt
-                
-                if not self.http_session:
-                    self.logger.error("aiohttp.ClientSession not available. Cannot initialize KickClient.")
-                    raise KickBotException("aiohttp.ClientSession not initialized before KickClient.") # Raise to halt
-
-                self.client = KickClient(kick_email, kick_pass, aiohttp_session=self.http_session)
-                self.logger.info("KickClient initialized.")
-                
-                # Store auth token in environment for fallback auth mechanism
-                if hasattr(self.client, 'auth_token') and self.client.auth_token:
-                    os.environ["KICK_AUTH_TOKEN"] = self.client.auth_token
-                    self.logger.info("Set KICK_AUTH_TOKEN in environment for fallback authentication")
+            # Store auth token in environment for fallback auth mechanism
+            os.environ["KICK_AUTH_TOKEN"] = token
+            
+        except Exception as e:
+            self.logger.error(f"OAuth authentication failed: {e}")
+            self.logger.info("🔄 Starting automatic OAuth authorization flow...")
+            
+            # Start automatic OAuth authorization
+            success = await self._handle_automatic_oauth_authorization()
+            if not success:
+                raise KickBotException(f"OAuth authentication failed: {e}")
+            
+            # Try again after authorization
+            token = await self.auth_manager.get_valid_token()
+            self.logger.info("✅ OAuth authentication successful after automatic authorization.")
+            os.environ["KICK_AUTH_TOKEN"] = token
         
         if not self.auth_manager:
             # Always use the default token file as specified by the user.
@@ -522,8 +498,8 @@ class KickBot:
                 self.http_session = session
                 self.logger.info("aiohttp.ClientSession created and active.")
 
-                # Initialize client and auth_manager first
-                await self._initialize_client_if_needed()
+                # Initialize OAuth authentication
+                await self._initialize_oauth_authentication()
 
                 # Ensure streamer_name is set before proceeding
                 if not self.streamer_name:
@@ -531,9 +507,8 @@ class KickBot:
                     # Optionally, prompt for streamer name or load from a default if that's desired behavior.
                     raise KickBotException("Streamer name not set.") # Critical to proceed
 
-                # Now that authentication is initialized, fetch streamer-specific info
-                if self.client or (self.use_oauth and self.auth_manager): 
-                    # We can fetch info using either client or OAuth auth manager
+                # Now that OAuth authentication is initialized, fetch streamer-specific info
+                if self.auth_manager:
                     try:
                         await get_streamer_info(self) # Populates self.streamer_info, including id
                         await get_chatroom_settings(self)
@@ -550,9 +525,9 @@ class KickBot:
                         self.is_super_admin = False
                         self.logger.info(f"Using fallback streamer info with chatroom_id: {self.chatroom_id}")
                 else:
-                    # This case should be caught by exceptions in _initialize_client_if_needed
-                    self.logger.error("Neither KickClient nor OAuth authentication available. Cannot fetch streamer info.")
-                    raise KickBotException("Authentication failed to initialize.")
+                    # This case should be caught by exceptions in _initialize_oauth_authentication
+                    self.logger.error("OAuth authentication not available. Cannot fetch streamer info.")
+                    raise KickBotException("OAuth authentication failed to initialize.")
 
                 # Initialize Event Manager and subscribe to events if new system is enabled and streamer info is available
                 if self.enable_new_webhook_system and self.webhook_enabled:
@@ -561,13 +536,9 @@ class KickBot:
                         if not self.event_manager: # Initialize only if not already done
                             self.event_manager = KickEventManager(
                                 auth_manager=self.auth_manager,
-                                client=self.client,  # This can be None in OAuth-only mode
+                                client=None,  # OAuth-only mode - no KickClient needed
                                 broadcaster_user_id=broadcaster_id_val
                             )
-                            # Set direct auth token for fallback authentication
-                            if hasattr(self.client, 'auth_token') and self.client.auth_token:
-                                self.event_manager.direct_auth_token = self.client.auth_token
-                                self.logger.info("Set direct auth token for event manager fallback authentication")
                             
                             self.logger.info(f"KickEventManager initialized for broadcaster ID: {broadcaster_id_val}.")
                             
@@ -611,7 +582,7 @@ class KickBot:
                         missing_deps = []
                         if not (self.streamer_info and self.streamer_info.get('id')): missing_deps.append("streamer_info.id")
                         if not self.auth_manager: missing_deps.append("auth_manager")
-                        if not self.client: missing_deps.append("client")
+                        # client not needed in OAuth-only mode
                         self.logger.warning(f"Cannot initialize KickEventManager or subscribe to events. Missing dependencies: {', '.join(missing_deps)}.")
                 else:
                     if not self.enable_new_webhook_system:
@@ -630,13 +601,12 @@ class KickBot:
                 else:
                     self.logger.info("KickWebhookEnabled is false. Webhook server will not start.")
 
-                # Start polling for chat messages (traditional method) - only if not using OAuth-only mode
-                if self.client and self.chatroom_id: # Ensure client and chatroom_id are ready for polling
-                    await self._poll()
-                elif not self.use_oauth:
-                    self.logger.error("Cannot start polling: KickClient not initialized or chatroom_id not found.")
+                # Keep bot alive for webhook processing (OAuth-only mode)
+                if self.chatroom_id:
+                    # WebSocket polling removed - bot now operates via webhooks only
+                    await asyncio.sleep(1)  # Keep bot alive for webhook processing
                 else:
-                    self.logger.info("Using OAuth-only mode - chat events will be received via webhooks instead of polling.")
+                    self.logger.info("OAuth-only mode - chat events will be received via webhooks instead of polling.")
                     # In OAuth-only mode, keep the bot running to handle webhook events and timed events
                     await self._oauth_main_loop()
         
@@ -674,7 +644,7 @@ class KickBot:
                 await self.ws_connection.close()
                 self.logger.info("WebSocket connection closed.")
             except Exception as e:
-                self.logger.error(f"Error closing WebSocket connection: {e}", exc_info=True)
+                self.logger.error(f"Error during bot shutdown: {e}", exc_info=True)
         
         if hasattr(self, 'ws') and self.ws and hasattr(self.ws, 'stop') and callable(self.ws.stop):
             try:
@@ -740,7 +710,7 @@ class KickBot:
         # as they depend on http_session and correct call order.
 
         # The following calls are MOVED to the run() method after client initialization:
-        # await self._initialize_client_if_needed() # MOVED
+        # OAuth authentication initialization moved to run() method
         # get_streamer_info(self) # MOVED
         # get_chatroom_settings(self) # MOVED
         # get_bot_settings(self) # MOVED
@@ -888,7 +858,11 @@ class KickBot:
         if self.webhook_enabled and self.enable_new_webhook_system and self.kick_events_to_subscribe:
             # Add timed event to verify subscriptions every 30 minutes
             verification_interval = timedelta(minutes=30)
-            self.add_timed_event(verification_interval, self.verify_event_subscriptions)
+            # Create a wrapper function that matches the timed event signature
+            async def subscription_verification_wrapper(bot):
+                await bot.verify_event_subscriptions()
+            
+            self.add_timed_event(verification_interval, subscription_verification_wrapper)
             self.logger.info(f"Subscription verification scheduled every {verification_interval}")
 
     async def send_text(self, message: str) -> None:
@@ -1061,155 +1035,9 @@ class KickBot:
             self.webhook_runner = None
         self.webhook_handler = None
 
-    async def _poll(self) -> None:
-        """
-        Main loop for handling events and messages for the Kick WebSocket.
-        This will now run as part of the main `run` method.
-        """
-        if self.streamer_name is None:
-            raise KickBotException("Must set streamer name to monitor first.")
+    # WebSocket polling method removed - bot now operates via webhooks only
 
-        # Timed event tasks are now managed in add_timed_event
-        timed_event_tasks = [event["task"] for event in self.timed_events]
-
-        async with websockets.connect(self._ws_uri) as websocket:
-            self.ws_connection = websocket
-            self.logger.info(f"Connected to {self.streamer_name}'s chat via WebSocket.")
-            await self._join_chatroom(self.chatroom_id)
-            self.logger.info(f"Attempted to join chatroom ID: {self.chatroom_id}") # Log chatroom join attempt
-
-            while self._is_active:
-                try:
-                    # message is now potentially None if _recv failed, renamed to avoid confusion with outer scope message
-                    received_message_data = await asyncio.wait_for(self._recv(), timeout=1.0)
-                    
-                    if received_message_data is None: # If _recv returned None (e.g. on error or clean close)
-                        if not self._is_active: # If _is_active was set to False in _recv
-                            self.logger.info("Exiting poll loop as _is_active is False (likely due to _recv error/close).")
-                            break # Exit the while loop
-                        continue # Otherwise, continue to next iteration (e.g. if only JSON decode failed but connection is alive)
-
-                    # Process the successfully received and parsed message data
-                    event_type = received_message_data.get("event")
-                    data = received_message_data.get("data")
-
-                    # Check for 'gerard' in message content for ChatMessageEvent
-                    if event_type == "App\\Events\\ChatMessageEvent" and data:
-                        try:
-                            if isinstance(data, str):
-                                data_obj = json.loads(data)
-                            else:
-                                data_obj = data
-                                
-                            message_content = str(data_obj.get('content', ''))
-                            sender_username = str(data_obj.get('sender', {}).get('username', ''))
-                            
-                            if 'gerard' in message_content.casefold():
-                                try:
-                                    req = requests.post("http://192.168.0.30:7862/update_chat", 
-                                                       json={'nickname': sender_username, 'context': message_content})
-                                    if req.status_code == 200:
-                                        self.logger.info("Context updated successfully.")
-                                    else:
-                                        self.logger.warning(f"Failed to update context: {req.status_code}")
-                                except Exception as e:
-                                    self.logger.error(f"Error updating context: {e}")
-                        except Exception as e:
-                            self.logger.error(f"Error processing 'gerard' detection: {e}")
-
-                    # This data is now the Python dict from json.loads in _recv, or from direct assignment if not string initially.
-                    # The initial string check and json.loads for 'data' at this level can be simplified or removed
-                    # if _recv guarantees 'data' (when part of received_message_data) is already loaded from JSON string, 
-                    # or is the original non-string data.
-                    # For now, keeping the existing structure for data handling, but it might need review based on _recv's behavior.
-
-                    if data and isinstance(data, str): # This check might be redundant if _recv always parses JSON strings
-                        try:
-                            data = json.loads(data) # This might attempt to double-parse if _recv already did.
-                        except json.JSONDecodeError:
-                            self.logger.warning(f"Could not decode JSON from 'data' field: {data}")
-                            continue
-
-                    if event_type == "App\\Events\\SocketMessageEvent":
-                        self.logger.debug(f"Received SocketMessageEvent: {received_message_data}")
-                        if data:
-                            # For SocketMessageEvent, 'data' field can itself be a JSON string.
-                            # This needs careful handling if the outer 'data' was already parsed.
-                            # Assuming 'inner_data' is the actual payload here.
-                            inner_data_payload = data # Start with data as is.
-                            if isinstance(data, str):
-                                try:
-                                    inner_data_payload = json.loads(data)
-                                except json.JSONDecodeError:
-                                    self.logger.error(f"Failed to parse inner JSON data from SocketMessageEvent: {data}")
-                                    continue # Skip this message
-                            
-                            if inner_data_payload:
-                                if inner_data_payload.get('type') == 'message':
-                                    await self._handle_chat_message(inner_data_payload)
-                                elif inner_data_payload.get('type') == 'App\\Events\\FollowEvent':
-                                    # Placeholder for handling FollowEvent if it comes via SocketMessageEvent
-                                    self.logger.debug(f"FollowEvent received via SocketMessageEvent: {inner_data_payload}")
-                                    pass
-                                elif inner_data_payload.get('type') == 'gifted_subscriptions':
-                                    # Placeholder for handling gifted_subscriptions if it comes via SocketMessageEvent
-                                    self.logger.debug(f"GiftedSubscriptions event received via SocketMessageEvent: {inner_data_payload}")
-                                    pass
-                    elif event_type == "App\\Events\\ChatMessageSentEvent": 
-                        self.logger.debug(f"Received ChatMessageSentEvent: {received_message_data}")
-                        # Expect 'data' to be a dict here, as parsed by _recv or passed directly if not string.
-                        if data and isinstance(data, dict):
-                            await self._handle_chat_message(data)
-                        else:
-                            self.logger.warning(f"Received ChatMessageSentEvent with invalid or non-dict data: {data}")
-                    elif event_type == "pusher:connection_established":
-                        await self._handle_first_connect(received_message_data)
-                    elif event_type == "App\\Events\\UserBannedEvent":
-                        if data:
-                            await self._handle_ban(data)
-                    elif event_type == "pusher_internal:subscription_succeeded":
-                        self.logger.debug(f"Full pusher_internal:subscription_succeeded event: {received_message_data}")
-                        # Get channel from the top-level of the event, not from its 'data' field.
-                        actual_subscribed_channel = received_message_data.get('channel')
-                        self.logger.info(f"Successfully subscribed to Pusher channel: {actual_subscribed_channel}")
-                    else:
-                        self.logger.info(f"Received unhandled WebSocket event type: {event_type}")
-                        self.logger.debug(f"Full unhandled message: {received_message_data}")
-
-                except asyncio.TimeoutError:
-                    self.logger.debug("WebSocket receive timed out. No message in 1s.") # More visible log
-                    continue
-                except websockets.exceptions.ConnectionClosedError as e:
-                    self.logger.error(f"WebSocket connection closed unexpectedly: {e}. Attempting to reconnect...")
-                    if self._is_active:
-                        await asyncio.sleep(5)
-                        break
-                    else:
-                        self.logger.info("WebSocket connection closed during shutdown.")
-                        break
-                except Exception as e:
-                    self.logger.error(f"Error in WebSocket polling loop: {e}", exc_info=True)
-                    if self._is_active:
-                        await asyncio.sleep(5)
-                    else:
-                        break
-
-        for task in timed_event_tasks:
-            task.cancel()
-        await asyncio.gather(*timed_event_tasks, return_exceptions=True)
-        self.logger.info("Timed event tasks cancelled.")
-
-    async def _join_chatroom(self, chatroom_id):
-        """
-        Join the chatroom via websocket.
-        """
-        join_command = {
-            "event": "pusher:subscribe",
-            "data": {
-                "channel": f"chatrooms.{chatroom_id}"
-            }
-        }
-        await self.ws_connection.send(json.dumps(join_command))
+    # WebSocket _join_chatroom method removed - bot now operates via webhooks only
         
     async def _run_timed_event(self, frequency_time: timedelta, timed_function: Callable):
         """
@@ -1227,63 +1055,26 @@ class KickBot:
                 self.logger.error(f"Error in timed event {timed_function.__name__}: {e}", exc_info=True)
                 await asyncio.sleep(frequency_time.total_seconds())
 
-    async def _send(self, command: dict) -> None:
-        """
-        Json dumps command and sends over socket.
+    # WebSocket _send method removed - bot now sends messages via OAuth API only
 
-        :param command: dictionary to convert to json command
-        """
-        await self.sock.send(json.dumps(command))
+    # WebSocket _recv method removed - bot now receives messages via webhooks only
 
-    async def _recv(self) -> Optional[dict]:
-        """
-        Receives raw data, logs it, then tries to parse as JSON.
-        Returns None if connection closes, JSON parsing fails, or other critical error.
-        """
-        raw_data = None # Initialize raw_data to ensure it's available for logging in case of early errors
-        try:
-            raw_data = await self.ws_connection.recv()
-            self.logger.debug(f"Raw WebSocket data received: {raw_data}")
-            return json.loads(raw_data)
-        except websockets.exceptions.ConnectionClosedOK:
-            self.logger.info("WebSocket connection closed normally by remote.")
-            self._is_active = False # Stop polling if connection closed
-            return None
-        except websockets.exceptions.ConnectionClosedError as e:
-            self.logger.error(f"WebSocket connection closed with error: {e}")
-            self._is_active = False # Stop polling
-            return None
-        except json.JSONDecodeError as e:
-            # Ensure raw_data is a string or can be represented as a string for the log message
-            raw_data_str = raw_data if isinstance(raw_data, str) else str(raw_data)
-            self.logger.error(f"Failed to decode JSON from WebSocket: {raw_data_str}. Error: {e}")
-            return None
-        except Exception as e:
-            self.logger.error(f"Unexpected error in _recv: {e}", exc_info=True)
-            self._is_active = False # Stop polling on unexpected errors
-            return None
-
-    async def _handle_first_connect(self, message):
-        """
-        Handle the 'pusher:connection_established' event from the websocket.
-        Currently a no-op.
-        """
-        self.logger.info("WebSocket connection established (pusher:connection_established event).")
-        # Optionally, parse the message or update state if needed.
-        pass
+    # WebSocket connection handler removed - bot now operates via webhooks only
 
     async def _handle_chat_message(self, inbound_message: dict) -> None:
         """
-        Handles incoming messages from both websocket and webhook, 
+        Handles incoming messages from webhooks, 
         checks if the message.content is in dict of handled commands / messages.
 
-        :param inbound_message: Raw inbound message from socket or webhook
+        :param inbound_message: Raw inbound message from webhook
         """
         try:
             message: KickMessage = message_from_data(inbound_message)
             
             # Skip if this is a message from the bot itself
-            if message.sender.username == self.client.bot_name:
+            # In OAuth-only mode, get bot username from settings or auth manager
+            bot_username = settings.get('BotUsername') or 'botoshi'  # Default fallback
+            if message.sender.username == bot_username:
                 return
                 
             # Check for message ID deduplication
