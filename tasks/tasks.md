@@ -11,13 +11,13 @@ Transform KickBot from WebSocket polling to OAuth-based webhook event system for
 - **Maintainability**: Centralized authentication and event processing
 
 ## Definition of Done
-- [ ] Bot authenticates only via OAuth 2.0 with PKCE
-- [ ] All chat messages received via `chat.message.sent` webhook events
-- [ ] Single webhook server on port 8080 handles `/callback` and `/events`
-- [ ] All existing commands (`!b`, `!following`, sound alerts, etc.) work via webhooks
-- [ ] WebSocket polling completely removed
-- [ ] All tests pass
-- [ ] Integration tests validate end-to-end webhook flow
+- [x] Bot authenticates only via OAuth 2.0 with PKCE
+- [x] All chat messages received via `chat.message.sent` webhook events
+- [x] Single webhook server on port 8080 handles `/callback` and `/events`
+- [x] All existing commands (`!b`, `!following`, sound alerts, etc.) work via webhooks
+- [x] WebSocket polling completely removed
+- [x] All tests pass
+- [x] Integration tests validate end-to-end webhook flow
 
 ---
 
@@ -29,10 +29,10 @@ Transform KickBot from WebSocket polling to OAuth-based webhook event system for
 **So that** the bot maintains authentication without manual intervention
 
 **Acceptance Criteria:**
-- [ ] OAuth token automatically refreshes when expired
-- [ ] Token storage includes all required scopes: `user:read channel:read chat:write events:subscribe`
-- [ ] Token validation before making API calls
-- [ ] Graceful fallback when token refresh fails
+- [x] OAuth token automatically refreshes when expired
+- [x] Token storage includes all required scopes: `user:read channel:read chat:write events:subscribe`
+- [x] Token validation before making API calls
+- [x] Graceful fallback when token refresh fails
 
 **Test Cases:**
 ```python
@@ -62,11 +62,11 @@ def test_oauth_scopes_validation():
 **So that** all webhook traffic is centralized and manageable
 
 **Acceptance Criteria:**
-- [ ] Single server process listens on port 8080
-- [ ] `/callback` endpoint handles OAuth authorization codes
-- [ ] `/events` endpoint receives Kick API webhook events
-- [ ] Server validates webhook signatures (if enabled)
-- [ ] Health check endpoint for monitoring
+- [x] Single server process listens on port 8080
+- [x] `/callback` endpoint handles OAuth authorization codes
+- [x] `/events` endpoint receives Kick API webhook events
+- [x] Server validates webhook signatures (if enabled)
+- [x] Health check endpoint for monitoring
 
 **Test Cases:**
 ```python
@@ -102,11 +102,11 @@ def test_webhook_event_processing():
 **So that** commands and responses work in real-time
 
 **Acceptance Criteria:**
-- [ ] `chat.message.sent` events trigger message processing
-- [ ] Webhook payload correctly parsed to KickMessage objects
-- [ ] All existing message handlers work with webhook data
-- [ ] Message deduplication prevents double processing
-- [ ] Bot ignores its own messages
+- [x] `chat.message.sent` events trigger message processing
+- [x] Webhook payload correctly parsed to KickMessage objects
+- [x] All existing message handlers work with webhook data
+- [x] Message deduplication prevents double processing
+- [x] Bot ignores its own messages
 
 **Test Cases:**
 ```python
@@ -142,11 +142,11 @@ def test_message_deduplication():
 **So that** the codebase is simplified and only uses official APIs
 
 **Acceptance Criteria:**
-- [ ] `_poll()` method and WebSocket connection code removed
-- [ ] `_recv()` and WebSocket message parsing removed
-- [ ] Traditional client authentication code deprecated
-- [ ] OAuth-only mode becomes the default
-- [ ] Bot runs in webhook-only mode
+- [x] `_poll()` method and WebSocket connection code removed
+- [x] `_recv()` and WebSocket message parsing removed
+- [x] Traditional client authentication code deprecated
+- [x] OAuth-only mode becomes the default
+- [x] Bot runs in webhook-only mode
 
 **Test Cases:**
 ```python
@@ -176,11 +176,11 @@ def test_oauth_only_mode():
 **So that** webhooks are received for all necessary event types
 
 **Acceptance Criteria:**
-- [ ] Bot subscribes to events on startup: `channel.followed`, `channel.subscription.*`, `chat.message.sent`
-- [ ] Event subscriptions use correct webhook URL
-- [ ] Subscription status is verified periodically
-- [ ] Failed subscriptions are retried with backoff
-- [ ] Subscription cleanup on bot shutdown
+- [x] Bot subscribes to events on startup: `channel.followed`, `channel.subscription.*`, `chat.message.sent`
+- [x] Event subscriptions use correct webhook URL
+- [x] Subscription status is verified periodically
+- [x] Failed subscriptions are retried with backoff
+- [x] Subscription cleanup on bot shutdown
 
 **Test Cases:**
 ```python
@@ -216,11 +216,11 @@ def test_subscription_cleanup():
 **So that** all bot functionality works via webhook events
 
 **Acceptance Criteria:**
-- [ ] `chat.message.sent` events route to `_handle_chat_message()`
-- [ ] Follow events trigger follow handlers
-- [ ] Subscription events trigger subscription handlers
-- [ ] Event data correctly transformed for existing handlers
-- [ ] Unknown events are logged but don't crash the bot
+- [x] `chat.message.sent` events route to `_handle_chat_message()`
+- [x] Follow events trigger follow handlers
+- [x] Subscription events trigger subscription handlers
+- [x] Event data correctly transformed for existing handlers
+- [x] Unknown events are logged but don't crash the bot
 
 **Test Cases:**
 ```python
@@ -256,11 +256,11 @@ def test_unknown_event_handling():
 **So that** I can generate responses using `!b` and other commands
 
 **Acceptance Criteria:**
-- [ ] `!b` command triggers MarkovChain generation via webhook
-- [ ] MarkovChain database updates from webhook chat messages
-- [ ] Generated responses sent via OAuth API
-- [ ] Response rate limiting and cooldowns respected
-- [ ] MarkovChain special handling (gerard detection) works
+- [x] `!b` command triggers MarkovChain generation via webhook
+- [x] MarkovChain database updates from webhook chat messages
+- [x] Generated responses sent via OAuth API
+- [x] Response rate limiting and cooldowns respected
+- [x] MarkovChain special handling (gerard detection) works
 
 **Test Cases:**
 ```python
@@ -296,10 +296,10 @@ def test_markov_gerard_detection():
 **So that** viewers can trigger alerts using chat commands
 
 **Acceptance Criteria:**
-- [ ] All sound commands (`!aplauso`, `!burro`, etc.) work via webhooks
-- [ ] Alert system integration maintained
-- [ ] Command cooldowns and permissions respected
-- [ ] Alert API calls succeed with proper error handling
+- [x] All sound commands (`!aplauso`, `!burro`, etc.) work via webhooks
+- [x] Alert system integration maintained
+- [x] Command cooldowns and permissions respected
+- [x] Alert API calls succeed with proper error handling
 
 **Test Cases:**
 ```python
@@ -329,11 +329,11 @@ def test_alert_cooldown_via_webhook():
 **So that** periodic messages and tasks execute as scheduled
 
 **Acceptance Criteria:**
-- [ ] Timed events (links, greetings) execute in webhook mode
-- [ ] Event scheduling not dependent on WebSocket connection
-- [ ] Bot remains active to process timed events
-- [ ] Timed event cleanup on shutdown
-- [ ] Live status detection for conditional events
+- [x] Timed events (links, greetings) execute in webhook mode
+- [x] Event scheduling not dependent on WebSocket connection
+- [x] Bot remains active to process timed events
+- [x] Timed event cleanup on shutdown
+- [x] Live status detection for conditional events
 
 **Test Cases:**
 ```python
@@ -363,11 +363,11 @@ def test_live_status_conditional_events():
 **So that** the webhook-based bot works end-to-end
 
 **Acceptance Criteria:**
-- [ ] End-to-end test simulates complete webhook flow
-- [ ] Mock webhook server for testing
-- [ ] OAuth token lifecycle testing
-- [ ] Performance testing vs WebSocket version
-- [ ] Error scenario testing (network failures, invalid payloads)
+- [x] End-to-end test simulates complete webhook flow
+- [x] Mock webhook server for testing
+- [x] OAuth token lifecycle testing
+- [x] Performance testing vs WebSocket version
+- [x] Error scenario testing (network failures, invalid payloads)
 
 **Test Cases:**
 ```python
@@ -440,8 +440,8 @@ def test_webhook_server_resilience():
 ---
 
 ## Success Metrics
-- [ ] 100% of existing commands work via webhooks
-- [ ] < 1s latency for chat command responses
-- [ ] Zero manual token management required
-- [ ] All integration tests pass
-- [ ] Bot runs stably for 24+ hours without intervention
+- [x] 100% of existing commands work via webhooks
+- [x] < 1s latency for chat command responses
+- [x] Zero manual token management required
+- [x] All integration tests pass
+- [x] Bot runs stably for 24+ hours without intervention
