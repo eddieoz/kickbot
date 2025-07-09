@@ -33,7 +33,7 @@ class TestOAuthTokenManagement(unittest.TestCase):
         self.test_client_id = "test_client_id"
         self.test_client_secret = "test_client_secret"
         self.test_redirect_uri = "https://test.example.com/callback"
-        self.test_scopes = "user:read channel:read chat:read chat:write events:subscribe"
+        self.test_scopes = "user:read channel:read chat:write events:subscribe"
         
         # Sample token data
         self.valid_token_data = {
@@ -128,7 +128,7 @@ class TestOAuthTokenManagement(unittest.TestCase):
         )
         
         # Test scope validation
-        required_scopes = ["user:read", "channel:read", "chat:read", "chat:write", "events:subscribe"]
+        required_scopes = ["user:read", "channel:read", "chat:write", "events:subscribe"]
         
         # Set token data
         auth_manager.access_token = "test_token"
@@ -224,7 +224,7 @@ class TestOAuthTokenManagement(unittest.TestCase):
         auth_url, code_verifier = auth_manager.get_authorization_url()
         
         # Verify all required scopes are in the URL
-        required_scopes = ["user:read", "channel:read", "chat:read", "chat:write", "events:subscribe"]
+        required_scopes = ["user:read", "channel:read", "chat:write", "events:subscribe"]
         for scope in required_scopes:
             self.assertIn(scope.replace(":", "%3A"), auth_url, f"Required scope '{scope}' not found in auth URL")
 

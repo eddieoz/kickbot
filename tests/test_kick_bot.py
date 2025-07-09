@@ -69,7 +69,7 @@ def mock_env_vars(monkeypatch):
     monkeypatch.setenv("KICK_CLIENT_ID", "env_client_id")
     monkeypatch.setenv("KICK_CLIENT_SECRET", "env_client_secret")
     monkeypatch.setenv("KICK_REDIRECT_URI", "http://localhost/env_callback")
-    monkeypatch.setenv("KICK_SCOPES", "events:subscribe user:read chatroom:read")
+    monkeypatch.setenv("KICK_SCOPES", "events:subscribe user:read channel:read chat:write")
 
 @async_fixture
 async def mock_aiohttp_session():

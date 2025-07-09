@@ -34,7 +34,7 @@ class TestEventSubscriptionManagement(unittest.TestCase):
         self.test_client_id = "test_client_id"
         self.test_client_secret = "test_client_secret"
         self.test_redirect_uri = "https://test.example.com/callback"
-        self.test_scopes = "user:read channel:read chat:read chat:write events:subscribe"
+        self.test_scopes = "user:read channel:read chat:write events:subscribe"
         self.test_webhook_url = "https://test.example.com/events"
         self.test_broadcaster_id = 1139843
         

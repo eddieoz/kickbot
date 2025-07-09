@@ -42,7 +42,7 @@ async def main():
         print("KICK_CLIENT_ID=your_client_id")
         print("KICK_CLIENT_SECRET=your_client_secret")
         print("KICK_REDIRECT_URI=http://localhost:8080/callback")
-        print("KICK_SCOPES=chatroom:read user:read channel:read events:subscribe")
+        print("KICK_SCOPES=user:read channel:read chat:write events:subscribe")
         return
     
     try:

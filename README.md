@@ -68,8 +68,8 @@ KICK_CLIENT_SECRET="your_kick_application_client_secret"
 KICK_REDIRECT_URI="http://localhost:8080/callback"
 
 # OAuth Scopes (space-separated)
-# Default: "chatroom:read user:read channel:read events:subscribe"
-KICK_SCOPES="chatroom:read user:read channel:read events:subscribe"
+# Default: "user:read channel:read chat:write events:subscribe"
+KICK_SCOPES="user:read channel:read chat:write events:subscribe"
 
 # Webhook configuration (for receiving API events)
 KICK_WEBHOOK_PATH="/kick/events"

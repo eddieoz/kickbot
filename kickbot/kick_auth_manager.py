@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 KICK_CLIENT_ID = os.environ.get("KICK_CLIENT_ID")
 KICK_CLIENT_SECRET = os.environ.get("KICK_CLIENT_SECRET")
 KICK_REDIRECT_URI = os.environ.get("KICK_REDIRECT_URI")
-KICK_SCOPES = os.environ.get("KICK_SCOPES", "user:read channel:read chat:write events:subscribe") # Expanded default scopes
+KICK_SCOPES = os.environ.get("KICK_SCOPES", "user:read channel:read chat:write events:subscribe") # Valid Kick API scopes
 
 # Default token file location
 DEFAULT_TOKEN_FILE = "kickbot_tokens.json"

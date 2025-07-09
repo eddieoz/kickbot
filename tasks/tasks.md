@@ -30,7 +30,7 @@ Transform KickBot from WebSocket polling to OAuth-based webhook event system for
 
 **Acceptance Criteria:**
 - [ ] OAuth token automatically refreshes when expired
-- [ ] Token storage includes all required scopes: `user:read channel:read chat:read chat:write events:subscribe`
+- [ ] Token storage includes all required scopes: `user:read channel:read chat:write events:subscribe`
 - [ ] Token validation before making API calls
 - [ ] Graceful fallback when token refresh fails
 
@@ -421,7 +421,7 @@ def test_webhook_server_resilience():
 ```
 
 ### Dependencies
-- OAuth scopes: `user:read channel:read chat:read chat:write events:subscribe`  
+- OAuth scopes: `user:read channel:read chat:write events:subscribe`  
 - Webhook URL: `https://webhook.botoshi.sats4.life/events`
 - Callback URL: `https://webhook.botoshi.sats4.life/callback`
 
