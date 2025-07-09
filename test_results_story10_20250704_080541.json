@@ -1,0 +1,44 @@
+{
+  "timestamp": "2025-07-04T08:05:41.507405",
+  "overall_success": false,
+  "detailed_results": {
+    "oauth_tests": [],
+    "command_tests": [
+      {
+        "total_commands": 33,
+        "successful": 33,
+        "success_rate": 100.0,
+        "avg_response_time": 10.107761888793021
+      }
+    ],
+    "webhook_tests": [
+      {
+        "test": "server_health",
+        "status": "PASS",
+        "response_time": 1751615985.8528795
+      },
+      {
+        "test": "complete_flow",
+        "status": "PASS",
+        "response_time": 1.4344267845153809,
+        "event_type": "chat.message.sent"
+      }
+    ],
+    "performance_tests": [
+      {
+        "avg_response_time": 0.41460607647895814,
+        "max_response_time": 1.3211727142333984,
+        "min_response_time": 0.209808349609375,
+        "meets_requirement": false,
+        "total_tests": 40
+      }
+    ],
+    "error_tests": [
+      {
+        "scenarios_tested": 5,
+        "passed": 4,
+        "resilience_rate": 80.0
+      }
+    ]
+  }
+}

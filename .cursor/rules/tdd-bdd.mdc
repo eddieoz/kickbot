@@ -1,0 +1,84 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+**Combined TDD + BDD Testing Guidelines for AI-Assisted Development**
+
+You are an AI assistant helping develop software. Your task is to create and execute tests using a combined **Test-Driven Development (TDD)** and **Behavior-Driven Development (BDD)** approach. This ensures software is built incrementally based on clear requirements and behavioral specifications.
+
+Below are the **key principles and guidelines** for implementing this testing strategy:
+
+---
+
+### Core Principles
+
+1.  **Test-First (TDD Cycle: Red-Green-Refactor)**
+    *   **Red**: Write a failing test *before* writing the implementation code. This test should define a specific requirement or piece of functionality.
+    *   **Green**: Write the *minimum* amount of code necessary to make the failing test pass. Avoid adding extra features or optimizations at this stage.
+    *   **Refactor**: Improve the code's structure, readability, and performance *without* changing its external behavior (i.e., ensuring all tests still pass). Remove duplication and adhere to design principles.
+
+2.  **Behavior-Driven Specification (BDD: Given-When-Then)**
+    *   Structure tests around **behaviors** and **outcomes**, not implementation details.
+    *   Use the **Given-When-Then** format (explicitly in comments or implicitly through test structure) to describe scenarios:
+        *   **Given**: The initial context or state before the action.
+        *   **When**: The action or event performed by the user or system.
+        *   **Then**: The expected outcome or change in state.
+    *   Test names (`describe`, `it`, or equivalent) should clearly articulate the behavior being tested (e.g., `it('should return an error when the input is negative')`).
+
+### General Testing Guidelines
+
+1.  **Technology Agnostic Approach**
+    *   Apply these TDD/BDD principles regardless of the programming language, framework, or testing library used. Adapt the syntax (`describe`/`it`, `test`, `Scenario`, etc.) to the specific tools available.
+    *   Focus on the *logic* and *behavior*, not just framework-specific APIs (unless testing framework integration itself).
+
+2.  **Test Granularity**
+    *   **Unit Tests**: Focus on isolating and testing the smallest testable parts of the software (functions, methods, classes, modules) in isolation. Use mocks/stubs for external dependencies. Apply TDD rigorously here.
+    *   **Integration Tests**: Verify the interaction between different components or modules. BDD scenarios are often very effective here.
+    *   **End-to-End (E2E) Tests**: Simulate real user scenarios from start to finish. Define these using high-level BDD features/stories.
+
+3.  **Clear Test Structure and Naming**
+    *   Organize tests logically, often mirroring the structure of the code being tested.
+    *   Use descriptive names for test suites and individual test cases that reflect the behavior under test.
+
+4.  **Focus on Requirements**
+    *   Each test (especially in the TDD cycle) should correspond to a specific requirement or acceptance criterion.
+    *   BDD scenarios should directly map to user stories or feature specifications.
+
+5.  **Handling Dependencies and State**
+    *   Use dependency injection, mocks, stubs, or fakes to isolate the unit under test from external systems (databases, APIs, UI frameworks).
+    *   Manage test state carefully, ensuring tests are independent and can run in any order. Reset state between tests (e.g., using `beforeEach`, `afterEach`).
+
+6.  **Error Handling and Edge Cases**
+    *   Explicitly test for expected error conditions, invalid inputs, and boundary/edge cases using specific TDD cycles and BDD scenarios.
+    *   Example BDD for error: `Given an empty input field, When the user submits the form, Then an error message 'Input cannot be empty' should be displayed.`
+
+7.  **Refactoring Safely**
+    *   The comprehensive test suite built through TDD/BDD acts as a safety net, allowing confident refactoring of the implementation code. Ensure all tests pass after refactoring.
+
+8.  **Readability and Maintainability**
+    *   Write tests that are easy to understand. They serve as living documentation for the code's behavior.
+    *   Keep tests concise and focused on a single behavior or aspect. Avoid complex logic within tests themselves.
+
+---
+
+### AI Workflow Integration
+
+1.  **Requirement -> Test -> Code**
+    *   When given a requirement, first ask the AI to generate the BDD scenario(s) and the initial failing TDD test(s).
+    *   Then, ask the AI to write the minimal code to pass the test(s).
+    *   Finally, instruct the AI to refactor the code and potentially add more tests for edge cases or related behaviors.
+
+2.  **Bug Fixing**
+    *   When a bug is reported, first write a failing test that reproduces the bug (Red).
+    *   Then, fix the code to make the test pass (Green).
+    *   Refactor if necessary.
+
+3.  **Code Review**
+    *   Use the tests as a basis for reviewing code changes. Ensure tests cover the intended behavior and pass.
+
+---
+
+### Final Instruction
+
+Apply the combined TDD (Red-Green-Refactor) and BDD (Given-When-Then) principles consistently throughout the development process. Generate tests *before* or *concurrently with* implementation code. Focus on defining clear behaviors and ensuring requirements are met incrementally. The resulting test suite should be robust, readable, maintainable, and serve as accurate documentation for the software's functionality, regardless of the underlying technology stack.

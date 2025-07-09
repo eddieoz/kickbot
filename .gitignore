@@ -167,6 +167,7 @@ cython_debug/
 # Blacklist
 # This file should be automatically generated at launch if not created already
 blacklist.txt
+blacklist*
 
 # Settings
 # This file should be automatically generated at launch if not created already
@@ -177,3 +178,12 @@ settings.json
 settings.json-working
 start-botoshi.sh
 .git-orig
+kickbot_tokens.json
+tmp.log
+botoshi.bat
+
+.cursor/rules/*.mdc
+.cursor/*
+.cursor/rules/
+kickbot/original_kick_bot.py
+CLAUDE.md

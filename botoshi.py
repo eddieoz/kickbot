@@ -1,7 +1,15 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import logging
 from time import sleep
 import requests
 from urllib.parse import urlencode, quote_plus
+import asyncio
+import argparse
+import sys
+from pathlib import Path
 
 from threading import Lock, Timer
 lock = Lock()
@@ -11,7 +19,6 @@ import aiohttp
 from kickbot import KickBot, KickMessage
 from datetime import datetime, timedelta
 
-import sys
 sys.path.append('utils/TwitchMarkovChain/')
 
 from utils.repeat_bot import repeat
@@ -63,14 +70,16 @@ async def current_time(bot: KickBot, message: KickMessage):
 
 
 async def markov_chain(bot: KickBot, message: KickMessage):
-    """ Reply with the current UTC time """
+    """ Generate text using Markov chain algorithm """
     msg = message.content.split(' ')
-    msg.pop(0)
-    reply, ret = MarkovChain.generate(bot, msg)
+    msg.pop(0)  # Remove the command itself
+    
+    # Use the bot's generate method instead of directly calling MarkovChain.generate
+    reply, ret = bot.generate(msg)
 
     if 'gerard' in reply.casefold():
         try:
-            response = requests.post("http://127.0.0.1:7862/update_botoshi", json={'botoshi': reply.casefold().replace("gerard", "Gerrár Aithen")})
+            response = requests.post("http://192.168.0.30:7862/update_botoshi", json={'botoshi': reply.casefold().replace("gerard", "Gerrár Aithen")})
             if response.status_code == 200:
                 print("Context updated successfully.")
             else:
@@ -124,12 +133,14 @@ async def ban_by_bot_message(bot: KickBot, message: KickMessage):
             bot.moderator.permaban(username)
 
 async def send_links_in_chat(bot: KickBot):
-    """ Timed event to send social links every 30 mins """
+    if not getattr(bot, "is_live", False):
+        return
     links = "Youtube: https://youtube.com/eddieoz\n\nKick: https://kick.com/eddieoz\n\nSite: https://eddieoz.com"
     await bot.send_text(links)
 
 async def send_links_livecoins(bot: KickBot):
-    """ Timed event to send social links every 30 mins """
+    if not getattr(bot, "is_live", False):
+        return
     links = "Estamos participando da votação da Livecoins! Vote em nós! https://form.respondi.app/pjSDK4qg "
     await bot.send_text(links)
 
@@ -158,13 +169,15 @@ async def night_greeting(bot: KickBot, message: KickMessage):
     await bot.reply_text(message, reply)
 
 async def say_hello(bot: KickBot):
-    # randomize reply among a list of replies
+    if not getattr(bot, "is_live", False):
+        return
     replies = ["Oi!", "Hello!", "Salut!", "Hallo!", "Hola!", "Ciao!", "Olá!", "Hi!", "Oi oi oi!", "Oi oi!", "Oi oi oi oi oi!"]
     reply = f"{random.choice(replies)}"
     await bot.send_text(reply)
 
 async def im_back(bot: KickBot):
-    # randomize reply among a list of replies
+    if not getattr(bot, "is_live", False):
+        return
     replies = ["Sr. Botoshi online e se apresentando para o trabalho! 😎"]
     reply = f"{random.choice(replies)}"
     await bot.send_text(reply)
@@ -173,11 +186,12 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem !laele !chato"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
-    await send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
+    # await send_alert('https://media1.giphy.com/media/YRuFixSNWFVcXaxpmX/giphy.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
+    await send_alert('https://media1.tenor.com/m/KGz3fTqyJFkAAAAd/elon-musk-barron-trump.gif', 'https://www.myinstants.com/media/sounds/aplausos-efecto-de-sonido.mp3', '', '')
 
 async def burro_alert (bot: KickBot, message: KickMessage):
     await send_alert(' https://media.tenor.com/eRqBfix38e0AAAAC/dumb-youaredumb.gif', 'https://www.myinstants.com/media/sounds/como-voce-e-burro_2.mp3', '', '')
@@ -225,13 +239,32 @@ async def triste_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/I1R_uwk05DAAAAAC/sad-boys-rain.gif', 'https://www.myinstants.com/media/sounds/naruto-sad-music-instant.mp3', '', '')
 
 async def cadeira_alert (bot: KickBot, message: KickMessage):
-    await send_alert('https://media1.tenor.com/m/fe0xysTdZz0AAAAC/datena-cadeira.gif', 'https://www.myinstants.com/media/sounds/crash-oh-oh.mp3', '', '')
+    await send_alert('https://media1.tenor.com/m/fe0xysTdZz0AAAAC/datena-cadeira.gif', 'https://www.myinstants.com/media/sounds/one-punchhhhh-one-punchhhhh.mp3', '', '')
 
 async def inveja_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://media1.tenor.com/m/1Nr6H8HTWfUAAAAC/jim-chewing.gif', 'https://www.myinstants.com/media/sounds/o-a-inveja.mp3', '', '')
 
 async def didi_alert (bot: KickBot, message: KickMessage):
-    await send_alert('https://tenor.com/view/didi-didicao-zaaz-dog-cachorro-gif-20779949', 'https://www.myinstants.com/media/sounds/risada-de-zacarias.mp3', '', '')
+    await send_alert('https://media1.tenor.com/m/CtBMikB_xrQAAAAd/didi-didicao.gif', 'https://www.myinstants.com/media/sounds/risada-de-zacarias.mp3', '', '')
+
+async def elon_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://c.tenor.com/dT8haFvTVyEAAAAd/tenor.gif', 'https://www.myinstants.com/media/sounds/elon-musk-1.mp3', '', '')
+
+async def safado_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://i.giphy.com/mK4yuNnIuXKty9GDyW.webp', 'https://www.myinstants.com/media/sounds/cachorro-safado.mp3', '', '')
+
+async def viagem_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/xXkJHjznKPoAAAAd/elon-musk-tripping.gif', 'https://www.myinstants.com/media/sounds/viagem.mp3', '', '')
+
+async def laele_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/zJxKn-nsy-wAAAAC/rock-sus.gif', 'https://www.myinstants.com/media/sounds/la-ele-de-novo.mp3', '', '')
+
+async def morrediabo_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://media1.tenor.com/m/zJxKn-nsy-wAAAAC/rock-sus.gif', 'https://www.myinstants.com/media/sounds/la-ele-de-novo.mp3', '', '')
+
+async def chato_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://www.eddieoz.com/content/images/2025/05/media.gif', 'https://www.myinstants.com/media/sounds/chato_1CGBysf.mp3', 'Alerta de inconveniencia', 'Chato Chato Chato')
+
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
@@ -278,14 +311,45 @@ async def send_alert(img, audio, text, tts):
         except Exception as e:
             print(f'Error sending alert: {e}')
 
-if __name__ == '__main__':
+async def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='KickBot - OAuth Webhook Bot')
+    parser.add_argument('--force-reauth', action='store_true', 
+                       help='Force re-authentication by clearing existing OAuth tokens')
+    parser.add_argument('--clear-tokens', action='store_true',
+                       help='Clear OAuth tokens and exit (useful for testing)')
+    args = parser.parse_args()
+    
+    # Handle force re-authentication
+    if args.force_reauth or args.clear_tokens:
+        token_file = Path('kickbot_tokens.json')
+        if token_file.exists():
+            token_file.unlink()
+            print(f"🗑️  Cleared OAuth tokens from {token_file}")
+        else:
+            print(f"ℹ️  No token file found at {token_file}")
+            
+        # Also clear any temporary OAuth files
+        for temp_file in ['oauth_verifier.txt', 'oauth_code.txt']:
+            temp_path = Path(temp_file)
+            if temp_path.exists():
+                temp_path.unlink()
+                print(f"🗑️  Cleared temporary file: {temp_file}")
+        
+        if args.clear_tokens:
+            print("✅ OAuth tokens cleared. Exiting.")
+            return
+        
+        print("🔄 Forcing re-authentication on next startup...")
 
-    USERBOT_EMAIL = settings['KickEmail']
-    USERBOT_PASS = settings['KickPass']
+    USERBOT_EMAIL = settings.get('KickEmail')
+    USERBOT_PASS = settings.get('KickPass')
     STREAMER = settings['KickStreamer']
 
-    bot = KickBot(USERBOT_EMAIL, USERBOT_PASS)
-    bot.set_streamer(STREAMER)
+    # Use OAuth authentication instead of user/pass to avoid rate limiting
+    bot = KickBot(use_oauth=True)
+    bot.set_settings(settings)
+    await bot.set_streamer(STREAMER)
 
     bot.chatroom_id = settings['KickChatroom']
 
@@ -317,10 +381,14 @@ if __name__ == '__main__':
     bot.add_command_handler('!vergonha', vergonha_alert)
     bot.add_command_handler('!certo', certo_isso)
     bot.add_command_handler('!triste', triste_alert)
-    bot.add_command_handler('!cadeira', cadeira_alert)
+    # bot.add_command_handler('!cadeira', cadeira_alert)
     bot.add_command_handler('!inveja', inveja_alert)
     bot.add_command_handler('!didi', didi_alert)
-
+    bot.add_command_handler('!elon', elon_alert)
+    bot.add_command_handler('!safado', safado_alert)
+    bot.add_command_handler('!viagem', viagem_alert)
+    bot.add_command_handler('!laele', laele_alert)
+    bot.add_command_handler('!chato', chato_alert)
 
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)
@@ -340,6 +408,134 @@ if __name__ == '__main__':
     bot.add_timed_event(timedelta(minutes=15), say_hello)
     bot.add_timed_event(timedelta(seconds=1), im_back)
 
+    # Check if we should use webhook mode instead of traditional WebSocket
+    webhook_enabled = settings.get('KickWebhookEnabled', True)
+    disable_internal_webhook = settings.get('FeatureFlags', {}).get('DisableInternalWebhookServer', True)
     
-    bot.poll()
+    if webhook_enabled and disable_internal_webhook:
+        print("🚀 Starting KickBot with Unified Webhook Server (Story 2)")
+        print("📋 This replaces WebSocket polling with OAuth webhook events")
+        
+        # Import the unified webhook server
+        import oauth_webhook_server
+        
+        # Set the bot instance for webhook command processing
+        oauth_webhook_server.set_bot_instance(bot)
+        print("✅ Bot instance integrated with webhook server")
+        
+        # Initialize basic bot components for webhook mode
+        async with aiohttp.ClientSession() as session:
+            bot.http_session = session
+            print("✅ HTTP session created")
+            
+            # Start webhook server FIRST so it can handle OAuth callbacks
+            print("🌐 Starting unified webhook server on port 8080...")
+            
+            # Import and start the webhook server in background
+            webhook_server_task = asyncio.create_task(oauth_webhook_server.main())
+            print("✅ Webhook server started and ready to handle OAuth callbacks")
+            
+            # Add a small delay to ensure server is fully up
+            await asyncio.sleep(2)
+            
+            # Now initialize authentication (which may trigger OAuth flow)
+            try:
+                await bot._initialize_oauth_authentication()
+                print("✅ Authentication initialized")
+            except Exception as e:
+                print(f"❌ Authentication failed: {e}")
+                print("⚠️  Webhook server remains running for OAuth callbacks")
+                # Let the webhook server continue running for OAuth callbacks
+                await webhook_server_task
+            
+            # Get streamer info for moderator functions
+            try:
+                from kickbot.kick_helper import get_streamer_info, get_chatroom_settings, get_bot_settings
+                await get_streamer_info(bot)
+                await get_chatroom_settings(bot)
+                await get_bot_settings(bot)
+                print("✅ Streamer info loaded")
+            except Exception as e:
+                print(f"⚠️  Using fallback streamer info: {e}")
+                # Use fallback info from settings
+                bot.streamer_info = {'id': 1139843, 'user': {'id': 1139843}}
+                bot.chatroom_info = {'id': int(settings.get('KickChatroom', 1164726))}
+                bot.chatroom_id = int(settings.get('KickChatroom', 1164726))
+                bot.is_mod = True
+            
+            # Initialize moderator if needed (OAuth-only mode)
+            if not bot.moderator and bot.auth_manager:
+                from kickbot.kick_moderator import Moderator
+                bot.moderator = Moderator(bot)
+                print("✅ Moderator initialized")
+            
+            # Initialize Event Manager and subscribe to events
+            if bot.auth_manager and bot.streamer_info and bot.streamer_info.get('id'):
+                from kickbot.kick_event_manager import KickEventManager
+                
+                broadcaster_id = bot.streamer_info['id']
+                webhook_url = os.environ.get('KICK_WEBHOOK_URL', 'https://webhook.botoshi.sats4.life/events')
+                bot.event_manager = KickEventManager(
+                    auth_manager=bot.auth_manager,
+                    client=None,  # OAuth-only mode - no client needed
+                    broadcaster_user_id=broadcaster_id,
+                    webhook_url=webhook_url
+                )
+                
+                # No direct auth token in OAuth-only mode - using OAuth tokens instead
+                print("✅ Event manager initialized with OAuth authentication")
+                
+                print(f"✅ Event manager initialized for broadcaster ID: {broadcaster_id}")
+                
+                # Subscribe to configured events
+                if bot.kick_events_to_subscribe:
+                    print(f"🔔 Subscribing to {len(bot.kick_events_to_subscribe)} event types...")
+                    try:
+                        # Retry logic for event subscription
+                        max_retries = 3
+                        retry_delay = 5
+                        success = False
+                        
+                        for attempt in range(1, max_retries + 1):
+                            print(f"📡 Event subscription attempt {attempt}/{max_retries}")
+                            success = await bot.event_manager.resubscribe_to_configured_events(bot.kick_events_to_subscribe)
+                            
+                            if success:
+                                print("✅ Successfully subscribed to all configured Kick events")
+                                print(f"📋 Subscribed events: {[event['name'] for event in bot.kick_events_to_subscribe]}")
+                                break
+                            elif attempt < max_retries:
+                                print(f"⚠️  Subscription attempt {attempt} failed, retrying in {retry_delay} seconds...")
+                                await asyncio.sleep(retry_delay)
+                                retry_delay *= 2
+                        
+                        if not success:
+                            print("❌ Failed to subscribe to events after all retries")
+                            print("⚠️  Bot will continue but may not receive webhook events")
+                            
+                    except Exception as e:
+                        print(f"❌ Error during event subscription: {e}")
+                        print("⚠️  Bot will continue but may not receive webhook events")
+                
+                # Set up periodic subscription verification
+                verification_interval = timedelta(minutes=30)
+                # Create a wrapper function that matches the timed event signature
+                async def subscription_verification_wrapper(bot_instance):
+                    await bot_instance.verify_event_subscriptions()
+                
+                bot.add_timed_event(verification_interval, subscription_verification_wrapper)
+                print(f"✅ Subscription verification scheduled every {verification_interval}")
+            else:
+                print("⚠️  Event manager not initialized - missing auth manager or streamer info")
+            
+            print("🌐 Webhook server already running, waiting for events...")
+            
+            # Wait for the webhook server task that was started earlier
+            await webhook_server_task
+    else:
+        print("🔌 Starting KickBot with traditional WebSocket mode")
+        await bot.run()
+
+if __name__ == '__main__':
+    asyncio.run(main())
     

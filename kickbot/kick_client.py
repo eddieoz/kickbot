@@ -1,6 +1,9 @@
 import requests
 import logging
 import tls_client
+import aiohttp
+import time
+import random
 
 from typing import Optional
 from requests.cookies import RequestsCookieJar
@@ -14,13 +17,14 @@ class KickClient:
     """
     Class mainly for authenticating user, and handling http requests using tls_client to bypass cloudflare
     """
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(self, username: str, password: str, aiohttp_session: Optional[aiohttp.ClientSession] = None) -> None:
         self.username: str = username
         self.password: str = password
         self.scraper = tls_client.Session(
             client_identifier="chrome_116",
             random_tls_extension_order=True
         )
+        self.session = aiohttp_session
         self.xsrf: Optional[str] = None
         self.cookies: Optional[RequestsCookieJar] = None
         self.auth_token: Optional[str] = None
@@ -52,9 +56,22 @@ class KickClient:
             raise KickAuthException("Error when parsing token fields while attempting login.")
 
         login_payload = self._base_login_payload(name_field_name, token_field, login_token)
-        login_response = self._send_login_request(login_payload)
-        login_data = login_response.json()
+        login_response = self._send_login_request_with_retry(login_payload)
         login_status = login_response.status_code
+        
+        # Debug response before parsing JSON
+        logger.debug(f"Login response status: {login_status}")
+        logger.debug(f"Login response headers: {login_response.headers}")
+        logger.debug(f"Login response text: {login_response.text}")
+        
+        # Handle empty or non-JSON responses
+        if not login_response.text.strip():
+            raise KickAuthException(f"Empty response from login endpoint. Status: {login_status}")
+        
+        try:
+            login_data = login_response.json()
+        except Exception as e:
+            raise KickAuthException(f"Failed to parse login response as JSON. Status: {login_status}, Response: {login_response.text[:500]}, Error: {e}")
         match login_status:
             case 200:
                 self.auth_token = login_data.get('token')
@@ -71,7 +88,7 @@ class KickClient:
             case 419:
                 raise KickAuthException("Csrf Error:", login_data)
             case 403:
-                raise KickAuthException("Cloudflare blocked (gay). Might need to set a proxy. Response:", login_data)
+                raise KickAuthException("Cloudflare blocked. Might need to set a proxy. Response:", login_data)
             case _:
                 raise KickAuthException(f"Unexpected Response. Status Code: {login_status} | Response: {login_data}")
         logger.info("Login Successful...")
@@ -89,7 +106,11 @@ class KickClient:
         user_info_response = self.scraper.get(url, cookies=self.cookies, headers=headers)
         if user_info_response.status_code != 200:
             raise KickAuthException(f"Error fetching user info from {url}")
-        data = user_info_response.json()
+        try:
+            data = user_info_response.json()
+        except Exception as e:
+            logger.error(f"Failed to parse user info JSON: {e}")
+            raise KickAuthException(f"Failed to parse user info JSON: {e}")
         self.user_data = data
         self.bot_name = data.get('username')
         self.user_id = data.get('id')
@@ -126,22 +147,58 @@ class KickClient:
         url = 'https://kick.com/mobile/login'
         headers = BASE_HEADERS.copy()
         headers['X-Xsrf-Token'] = self.xsrf
-        return self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        return self.scraper.post(url, data=payload, cookies=self.cookies, headers=headers)
+
+    def _send_login_request_with_retry(self, payload: dict, max_retries: int = 3) -> requests.Response:
+        """
+        Perform the login post request with retry logic for rate limiting.
+        
+        :param payload: Login payload containing user info and tokens.
+        :param max_retries: Maximum number of retry attempts
+        :return: Login post request response
+        """
+        for attempt in range(max_retries + 1):
+            try:
+                response = self._send_login_request(payload)
+                
+                # If we get 429 (rate limited), wait and retry
+                if response.status_code == 429 and attempt < max_retries:
+                    # Extract retry-after header if present
+                    retry_after = response.headers.get('Retry-After')
+                    if retry_after:
+                        wait_time = int(retry_after)
+                    else:
+                        # Exponential backoff with jitter
+                        wait_time = (2 ** attempt) + random.uniform(0, 1)
+                    
+                    logger.warning(f"Rate limited (429), waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
+                    time.sleep(wait_time)
+                    continue
+                
+                return response
+                
+            except Exception as e:
+                if attempt < max_retries:
+                    wait_time = (2 ** attempt) + random.uniform(0, 1)
+                    logger.warning(f"Login request failed: {e}, retrying in {wait_time} seconds")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    raise
+        
+        # If we get here, all retries failed
+        raise KickAuthException(f"Login failed after {max_retries} retries")
 
     @staticmethod
     def _get_2fa_code() -> str:
         input_attempts = 0
         while input_attempts < 3:
             input_code = input("Enter the 2fa code you received from kick: ")
-            try:
-                code = int(input_code)
-                if len(str(code)) != 6:
-                    print("    Invalid input code format.")
-                    input_attempts += 1
-                else:
-                    return str(code)
-            except ValueError:
-                print("    Invalid code input. must consist of numbers only.")
+            if len(input_code) == 6 and input_code.isdigit():
+                return input_code
+            else:
+                print("    Invalid input code format. Must be exactly 6 digits.")
                 input_attempts += 1
         raise KickAuthException("Max 2fa code input attempts reached.")
 
@@ -149,6 +206,27 @@ class KickClient:
         url = 'https://kick.com/mobile/login'
         headers = BASE_HEADERS.copy()
         headers['X-Xsrf-Token'] = self.xsrf
-        response = self.scraper.post(url, json=payload, cookies=self.cookies, headers=headers)
-        self.auth_token = response.json().get('token')
-        return response.status_code == 200
+        headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        response = self.scraper.post(url, data=payload, cookies=self.cookies, headers=headers)
+        
+        if response.status_code == 200:
+            try:
+                login_data = response.json()
+                self.auth_token = login_data.get('token')
+                if self.auth_token:
+                    return True
+                else:
+                    logger.error("2FA login successful (200 OK) but no token found in response.")
+                    # Potentially raise an error here or return False to be caught by the caller
+                    # For now, let it fall through to return False as per original logic's effect
+                    return False # Or raise specific error
+            except requests.exceptions.JSONDecodeError as e:
+                logger.error(f"2FA login successful (200 OK) but failed to parse JSON response: {e}. Response text: {response.text}")
+                return False # Or raise specific error
+        else:
+            error_text = response.text
+            logger.error(f"2FA login request failed. Status: {response.status_code}, Response: {error_text}")
+            # The caller will raise based on the boolean, but we've logged the details.
+            # To make the exception more direct, we could raise here:
+            # raise KickAuthException(f"2FA login failed. Status: {response.status_code}, Response: {error_text}")
+            return False

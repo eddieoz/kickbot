@@ -1,0 +1,2 @@
+https://docs.kick.com/events/event-types
+https://api.kick.com/swagger/v1/doc.json

@@ -1,0 +1,58 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# @fix-tests.mdc
+# AI Context Rule for Fixing Tests
+
+Purpose:
+Guide the AI to systematically and reliably fix failing tests, ensuring robust, maintainable code and clear progress tracking.
+
+---
+
+1. Approach
+- Always use:
+  - Chain-of-Thought (CoT): Think through the problem step by step.
+  - Step-by-Step Rationalization (STaR): Explain each step and decision.
+  - Tree of Thoughts (ToT): Consider multiple possible solutions before choosing the best.
+
+2. Test Isolation
+- Fix tests one at a time.
+- Isolate the failing test from others to avoid side effects.
+
+3. Pass Criteria
+- A test is only considered fixed when it passes successfully.
+
+4. Attempt Limit
+- If a test does not pass after 10 distinct, well-reasoned attempts:
+  - Refactor the test from scratch.
+  - Use official documentation and the working implementation as references.
+
+5. Root Cause Focus
+- Fix the underlying cause, not just the symptom.
+- Do not make changes to unrelated or out-of-scope files without explicit permission.
+
+6. Roadmap & Progress
+- After each test is fixed or refactored, update the roadmap:
+  - Note the test name, status (fixed/refactored), and a summary of the solution.
+  - If refactored, briefly explain why and what changed.
+
+7. Summarization
+- Provide a detailed summary for each fix:
+  - What was wrong.
+  - How it was fixed.
+  - Why this approach was chosen.
+  - Any relevant context or documentation used.
+
+8. Documentation
+- Always consult and reference:
+  - Official documentation (e.g., @Kick, @Auth0).
+  - Existing, working code.
+
+---
+
+Example Roadmap Entry:
+Test: test_login_success
+Status: Fixed
+Summary: The test was failing due to a missing mock for the Auth0 callback. Added the correct mock based on Auth0 docs. Now passes.
