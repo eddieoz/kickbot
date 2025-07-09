@@ -24,7 +24,7 @@ VALID_FOLLOW_PAYLOAD = {
     "channel_id": "channel_xyz",
     "created_at": VALID_DATETIME_PAYLOAD_FORMAT,
     "data": {
-        "follower": {"id": "user_follower_abc", "username": "TestFollower"},
+        "follower": {"user_id": 123456, "username": "TestFollower"},
         "followed_at": VALID_DATETIME_PAYLOAD_FORMAT
     }
 }
@@ -35,7 +35,7 @@ VALID_SUBSCRIBE_PAYLOAD = {
     "channel_id": "channel_xyz",
     "created_at": VALID_DATETIME_PAYLOAD_FORMAT,
     "data": {
-        "subscriber": {"id": "user_sub_def", "username": "TestSubscriber"},
+        "subscriber": {"user_id": 789012, "username": "TestSubscriber"},
         "tier": "Tier 1",
         "duration": 3,
         "created_at": VALID_DATETIME_PAYLOAD_FORMAT,
@@ -49,10 +49,10 @@ VALID_GIFTED_SUB_PAYLOAD = {
     "channel_id": "channel_xyz",
     "created_at": VALID_DATETIME_PAYLOAD_FORMAT,
     "data": {
-        "gifter": {"id": "user_gifter_ghi", "username": "TestGifter"},
+        "gifter": {"user_id": 345678, "username": "TestGifter"},
         "recipients": [
-            {"id": "user_recip_jkl", "username": "TestRecipient1"},
-            {"id": "user_recip_mno", "username": "TestRecipient2"}
+            {"user_id": 901234, "username": "TestRecipient1"},
+            {"user_id": 567890, "username": "TestRecipient2"}
         ],
         "tier": "Tier 1",
         "created_at": VALID_DATETIME_PAYLOAD_FORMAT,
@@ -66,7 +66,7 @@ VALID_RENEWAL_PAYLOAD = {
     "channel_id": "channel_xyz",
     "created_at": VALID_DATETIME_PAYLOAD_FORMAT, # Event creation time
     "data": {
-        "subscriber": {"id": "user_renewer_xyz", "username": "LoyalRenewer"},
+        "subscriber": {"user_id": 111213, "username": "LoyalRenewer"},
         "tier": "Tier 2", # Corrected from subscription_tier to use the alias expected by Pydantic model
         "duration": 12, # Cumulative months
         "created_at": VALID_DATETIME_PAYLOAD_FORMAT, # Subscription period start

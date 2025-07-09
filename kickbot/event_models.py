@@ -5,10 +5,12 @@ from datetime import datetime # THIS IS THE PRIMARY DATETIME IMPORT
 
 class UserInfo(BaseModel):
     """Represents basic user information commonly found in events."""
-    id: str # Assuming user IDs are strings, adjust if they are integers
+    user_id: int = Field(..., validation_alias="user_id")  # Kick uses user_id in webhooks
     username: str
-    # profile_picture: Optional[HttpUrl] = None # Not consistently in all uses, make optional or specific per event data
-    # channel_slug: Optional[str] = None
+    is_verified: Optional[bool] = None
+    profile_picture: Optional[HttpUrl] = None
+    channel_slug: Optional[str] = None
+    is_anonymous: Optional[bool] = None
 
 class FollowerInfo(UserInfo):
     """Specific information for a follower."""
@@ -20,10 +22,12 @@ class SubscriberInfo(UserInfo):
 
 class GifterInfo(UserInfo):
     """Specific information for a gifter."""
-    id: Optional[str] = None
+    user_id: Optional[int] = Field(None, validation_alias="user_id")
     username: Optional[str] = None
-    # profile_picture: Optional[HttpUrl] = None
-    # channel_slug: Optional[str] = None
+    is_verified: Optional[bool] = None
+    profile_picture: Optional[HttpUrl] = None
+    channel_slug: Optional[str] = None
+    is_anonymous: Optional[bool] = None
 
 class RecipientInfo(UserInfo):
     """Specific information for a gift recipient."""

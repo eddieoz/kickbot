@@ -406,7 +406,7 @@ class KickWebhookHandler:
             return
 
         logger.info(
-            f"CHANNEL: {event.channel_id} - EVENT: {event.event} - FOLLOWER: {event.data.follower.username} (ID: {event.data.follower.id}) followed at {event.data.followed_at}. Event ID: {event.id}"
+            f"CHANNEL: {event.channel_id} - EVENT: {event.event} - FOLLOWER: {event.data.follower.username} (ID: {event.data.follower.user_id}) followed at {event.data.followed_at}. Event ID: {event.id}"
         )
         
         # Send chat message if new system is enabled and specific flag is true
@@ -428,7 +428,7 @@ class KickWebhookHandler:
             
         # Corrected access to fields based on SubscriptionEventData used by SubscriptionEventKick
         subscriber_username = event.data.subscriber.username
-        subscriber_id = event.data.subscriber.id
+        subscriber_id = event.data.subscriber.user_id
         tier = event.data.subscription_tier
         months = event.data.months_subscribed # This is duration (int)
         # created_at for subscription data, not top-level event wrapper
@@ -482,11 +482,11 @@ class KickWebhookHandler:
 
         gifter_info = event.data.gifter
         gifter_username = gifter_info.username if gifter_info and gifter_info.username else "Anonymous"
-        gifter_id = gifter_info.id if gifter_info and gifter_info.id else "N/A"
+        gifter_id = gifter_info.user_id if gifter_info and gifter_info.user_id else "N/A"
         
         recipients = event.data.giftees
         recipient_usernames = [rec.username for rec in recipients]
-        recipient_ids = [rec.id for rec in recipients]
+        recipient_ids = [rec.user_id for rec in recipients]
         num_gifted = len(recipients)
 
         logger.info(
@@ -552,7 +552,7 @@ class KickWebhookHandler:
             return
 
         logger.info(
-            f"CHANNEL: {event.channel_id} - EVENT: {event.event} - SUBSCRIBER: {event.data.subscriber.username} (ID: {event.data.subscriber.id}) "
+            f"CHANNEL: {event.channel_id} - EVENT: {event.event} - SUBSCRIBER: {event.data.subscriber.username} (ID: {event.data.subscriber.user_id}) "
             f"renewed subscription for {event.data.months_subscribed} months. "
             f"Tier: {event.data.subscription_tier if event.data.subscription_tier else 'Unknown'}. "
             f"Current period: {event.data.created_at} to {event.data.expires_at}. Event ID: {event.id}"
@@ -582,7 +582,7 @@ class KickWebhookHandler:
                 # points_to_add = self.points_to_award_for_renewal_sub
                 # await self.bot.award_points_to_user(user_id, points_to_add) # Example call
                 logger.info(
-                    f"Placeholder: Awarded {self.points_to_award_for_renewal_sub} points to {event.data.subscriber.username} (ID: {event.data.subscriber.id}) for subscription renewal."
+                    f"Placeholder: Awarded {self.points_to_award_for_renewal_sub} points to {event.data.subscriber.username} (ID: {event.data.subscriber.user_id}) for subscription renewal."
                 )
             except Exception as e:
                 logger.error(f"Failed to award points to {event.data.subscriber.username} for subscription renewal: {e}", exc_info=True)
