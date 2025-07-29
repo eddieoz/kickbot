@@ -1103,25 +1103,28 @@ class KickBot:
                 except Exception as e:
                     self.logger.error(f"Error processing message with MarkovChain: {e}", exc_info=True)
                     
-            # Check if the message is a gifted subscription message and sent by 'Kicklet'
-            if (message.sender.username == "Kicklet" and 
+            # LEGACY SYSTEM DISABLED: Check if the message is a gifted subscription message and sent by 'Kicklet'
+            # This legacy chat parsing is now handled by the webhook system in oauth_webhook_server.py
+            # Keeping this code commented for reference but it should not run to avoid duplicate processing
+            if False and (message.sender.username == "Kicklet" and 
                 "thank you" in content and 
                 "for the gifted" in content and 
                 "subscriptions" in content):
-                try:
-                    # Extract the gifter username and the number of subscriptions
-                    parts = content.split()
-                    gifter = parts[2].rstrip(',')  # The gifter's username is the third word, after "Thank you,"
-                    amount_index = parts.index("gifted") + 1  # The amount is the word after "gifted"
-                    amount = int(parts[amount_index])  # Convert the amount to an integer
-                    
-                    # Handle the gifted subscriptions
-                    if hasattr(self, '_handle_gifted_subscriptions'):
-                        await self._handle_gifted_subscriptions(gifter, amount)
-                    else:
-                        self.logger.warning("_handle_gifted_subscriptions method not available")
-                except (IndexError, ValueError) as e:
-                    self.logger.error(f"Error parsing gifted subscription message: {e}")
+                self.logger.info("LEGACY: Gifted subscription chat message detected, but processing disabled in favor of webhook system")
+                # try:
+                #     # Extract the gifter username and the number of subscriptions
+                #     parts = content.split()
+                #     gifter = parts[2].rstrip(',')  # The gifter's username is the third word, after "Thank you,"
+                #     amount_index = parts.index("gifted") + 1  # The amount is the word after "gifted"
+                #     amount = int(parts[amount_index])  # Convert the amount to an integer
+                #     
+                #     # Handle the gifted subscriptions
+                #     if hasattr(self, '_handle_gifted_subscriptions'):
+                #         await self._handle_gifted_subscriptions(gifter, amount)
+                #     else:
+                #         self.logger.warning("_handle_gifted_subscriptions method not available")
+                # except (IndexError, ValueError) as e:
+                #     self.logger.error(f"Error parsing gifted subscription message: {e}")
 
             # Check for direct message matches
             if content in self.handled_messages:
