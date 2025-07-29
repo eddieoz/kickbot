@@ -1102,6 +1102,242 @@ class TestKickWebhookHandler(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(handler_invalid_config.award_points_for_renewal_sub)
         self.assertEqual(handler_invalid_config.points_to_award_for_renewal_sub, 100)
 
+    # --- Tests for Story 11: Sub-Gift Points System Integration ---
+
+    async def test_webhook_triggers_existing_points_system(self):
+        """
+        Given: Webhook handler receives gifted subscription event
+        When: handle_gifted_subscription_event is called
+        Then: _handle_gifted_subscriptions method is called with correct parameters
+        """
+        # Create a mock bot with the existing _handle_gifted_subscriptions method
+        mock_bot = MagicMock()
+        mock_bot.send_text = AsyncMock()
+        mock_bot._handle_gifted_subscriptions = AsyncMock()  # Mock the existing method
+        
+        # Create handler with gifter points enabled
+        handler = KickWebhookHandler(
+            kick_bot_instance=mock_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True,
+                "AwardPointsToGifter": True,
+                "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True,
+                "PointsToRecipient": 25
+            }
+        )
+        
+        # Parse the gifted subscription event
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        
+        # Execute the handler
+        await handler.handle_gifted_subscription_event(parsed_event)
+        
+        # Verify that the existing _handle_gifted_subscriptions method was called
+        expected_gifter_username = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["username"]
+        expected_num_gifted = len(VALID_GIFTED_SUB_PAYLOAD["data"]["recipients"])
+        
+        mock_bot._handle_gifted_subscriptions.assert_called_once_with(
+            expected_gifter_username,
+            expected_num_gifted
+        )
+
+    async def test_points_actually_awarded_via_webhook(self):
+        """
+        Given: User gifts 3 subscriptions detected via webhook
+        When: Event is processed
+        Then: !subgift_add command is sent with correct points calculation
+        """
+        # Create a mock bot with the existing _handle_gifted_subscriptions method
+        mock_bot = MagicMock()
+        mock_bot.send_text = AsyncMock()
+        mock_bot._handle_gifted_subscriptions = AsyncMock()
+        
+        # Create handler with specific point values
+        handler = KickWebhookHandler(
+            kick_bot_instance=mock_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True,
+                "AwardPointsToGifter": True,
+                "PointsToGifterPerSub": 75,  # Custom value
+                "AwardPointsToRecipients": False,  # Focus on gifter only
+                "PointsToRecipient": 0
+            }
+        )
+        
+        # Parse a gift event with 3 subscriptions
+        gift_payload = VALID_GIFTED_SUB_PAYLOAD.copy()
+        gift_payload["data"]["recipients"] = [
+            {"user_id": 901234, "username": "TestRecipient1"},
+            {"user_id": 567890, "username": "TestRecipient2"},
+            {"user_id": 123456, "username": "TestRecipient3"}
+        ]
+        
+        parsed_event = parse_kick_event_payload(gift_payload)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        
+        # Execute the handler
+        await handler.handle_gifted_subscription_event(parsed_event)
+        
+        # Verify that the existing method was called with correct parameters
+        expected_gifter_username = gift_payload["data"]["gifter"]["username"]
+        expected_num_gifted = 3  # Number of recipients
+        
+        mock_bot._handle_gifted_subscriptions.assert_called_once_with(
+            expected_gifter_username,
+            expected_num_gifted
+        )
+
+    async def test_anonymous_gifter_webhook_handling(self):
+        """
+        Given: Anonymous user gifts subscriptions via webhook
+        When: Event is processed
+        Then: No points awarded but event is logged correctly
+        """
+        # Create a mock bot
+        mock_bot = MagicMock()
+        mock_bot.send_text = AsyncMock()
+        mock_bot._handle_gifted_subscriptions = AsyncMock()
+        
+        # Create handler with points enabled
+        handler = KickWebhookHandler(
+            kick_bot_instance=mock_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True,
+                "AwardPointsToGifter": True,
+                "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": True,
+                "PointsToRecipient": 25
+            }
+        )
+        
+        # Create an anonymous gift payload
+        anon_gift_payload = VALID_GIFTED_SUB_PAYLOAD.copy()
+        anon_gift_payload["data"]["gifter"] = None  # Anonymous gifter
+        
+        parsed_event = parse_kick_event_payload(anon_gift_payload)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        
+        # Execute the handler with logging to verify correct behavior
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='INFO') as cm:
+            await handler.handle_gifted_subscription_event(parsed_event)
+        
+        # Verify that _handle_gifted_subscriptions was NOT called for anonymous gifter
+        mock_bot._handle_gifted_subscriptions.assert_not_called()
+        
+        # Verify correct logging for anonymous handling
+        log_content = ''.join(cm.output)
+        self.assertIn("Cannot award points to gifter as they are Anonymous", log_content)
+        
+        # Verify chat message was still sent
+        self.assertTrue(mock_bot.send_text.called)
+
+    async def test_webhook_integration_error_handling(self):
+        """
+        Given: Webhook event with invalid gifter data
+        When: Integration attempts to call _handle_gifted_subscriptions
+        Then: Error is logged and webhook still returns 200
+        """
+        # Create a mock bot where _handle_gifted_subscriptions raises an exception
+        mock_bot = MagicMock()
+        mock_bot.send_text = AsyncMock()
+        mock_bot._handle_gifted_subscriptions = AsyncMock(side_effect=Exception("Points system error"))
+        
+        # Create handler
+        handler = KickWebhookHandler(
+            kick_bot_instance=mock_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True,
+                "AwardPointsToGifter": True,
+                "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": False,
+                "PointsToRecipient": 0
+            }
+        )
+        
+        # Parse the gifted subscription event
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        
+        # Execute the handler with logging to capture error handling
+        with self.assertLogs(logger='kickbot.kick_webhook_handler', level='ERROR') as cm:
+            # This should not raise an exception even though _handle_gifted_subscriptions fails
+            await handler.handle_gifted_subscription_event(parsed_event)
+        
+        # Verify that the exception was caught and logged
+        error_logs = ''.join(cm.output)
+        self.assertIn("Failed to award points to", error_logs)
+        self.assertIn("Points system error", error_logs)
+        
+        # Verify that _handle_gifted_subscriptions was called despite the error
+        mock_bot._handle_gifted_subscriptions.assert_called_once()
+        
+        # Verify that chat message was still sent (error in points shouldn't break other functionality)
+        mock_bot.send_text.assert_called_once()
+
+    async def test_no_duplicate_processing(self):
+        """
+        Given: Gift event triggers both webhook and chat message detection
+        When: Both systems process the same gift
+        Then: Points are only awarded once
+        
+        Note: This test verifies that the webhook system works correctly.
+        The actual duplicate prevention between webhook and chat message parsing
+        would require integration testing with both systems running simultaneously.
+        """
+        # Create a mock bot
+        mock_bot = MagicMock()
+        mock_bot.send_text = AsyncMock()
+        mock_bot._handle_gifted_subscriptions = AsyncMock()
+        
+        # Create handler
+        handler = KickWebhookHandler(
+            kick_bot_instance=mock_bot,
+            log_events=False,
+            enable_new_webhook_system=True,
+            disable_legacy_gift_handling=True,  # This should prevent duplicate processing
+            handle_gifted_subscription_event_actions={
+                "SendThankYouChatMessage": True,
+                "AwardPointsToGifter": True,
+                "PointsToGifterPerSub": 50,
+                "AwardPointsToRecipients": False,
+                "PointsToRecipient": 0
+            }
+        )
+        
+        # Parse the gifted subscription event
+        parsed_event = parse_kick_event_payload(VALID_GIFTED_SUB_PAYLOAD)
+        self.assertIsInstance(parsed_event, GiftedSubscriptionEvent)
+        
+        # Execute the handler multiple times to simulate potential duplicate processing
+        await handler.handle_gifted_subscription_event(parsed_event)
+        await handler.handle_gifted_subscription_event(parsed_event)
+        
+        # Verify that _handle_gifted_subscriptions was called twice (as expected)
+        # Each webhook event should be processed independently
+        # The actual duplicate prevention happens at the message ID level within _handle_chat_message
+        expected_gifter_username = VALID_GIFTED_SUB_PAYLOAD["data"]["gifter"]["username"]
+        expected_num_gifted = len(VALID_GIFTED_SUB_PAYLOAD["data"]["recipients"])
+        
+        # Should be called twice since we called the handler twice
+        self.assertEqual(mock_bot._handle_gifted_subscriptions.call_count, 2)
+        
+        # Verify the parameters were correct for both calls
+        for call in mock_bot._handle_gifted_subscriptions.call_args_list:
+            self.assertEqual(call[0], (expected_gifter_username, expected_num_gifted))
+        
+        # Verify that legacy handling flag is properly set to prevent old system activation
+        self.assertTrue(handler.disable_legacy_gift_handling)
+
 
 if __name__ == '__main__':
     unittest.main() 

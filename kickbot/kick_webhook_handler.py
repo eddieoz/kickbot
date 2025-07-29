@@ -273,8 +273,8 @@ class KickWebhookHandler:
                 logger.warning(f"Could not parse webhook payload into a known event model. Original Payload: {payload_dict_original}")
                 return
 
-            # Dispatch the event using the parsed Pydantic model
-            await self.dispatch_event(event_type_for_parser, parsed_event)
+            # Dispatch the event using the parsed Pydantic model and raw payload (for debugging)
+            await self.dispatch_event(event_type_for_parser, parsed_event, payload_dict_original)
         except Exception as e:
             logger.exception(f"Error processing webhook payload: {e}")
             # Since we've already responded with 200, just log the error
@@ -375,13 +375,14 @@ class KickWebhookHandler:
         self.event_handlers[event_type] = handler
         logger.info(f"Registered handler for event type: {event_type}")
     
-    async def dispatch_event(self, event_type: str, parsed_event: AnyKickEvent): # Changed event_data to parsed_event
+    async def dispatch_event(self, event_type: str, parsed_event: AnyKickEvent, raw_payload: dict = None): # Added raw_payload parameter
         """
         Dispatch an event to the registered handler.
         
         Args:
             event_type: The type of the event (e.g., "channel.followed")
             parsed_event: The parsed Pydantic model for the event
+            raw_payload: The original raw webhook payload (for debugging)
         """
         if event_type in self.event_handlers:
             handler_coro = self.event_handlers[event_type]
@@ -390,7 +391,11 @@ class KickWebhookHandler:
 
             logger.info(f"Dispatching event {event_type} to {handler_display_name}")
             try:
-                await handler_coro(parsed_event) # Pass the whole parsed event model
+                # Special handling for gifted subscription handler that needs raw payload for debugging
+                if event_type == "channel.subscription.gifts" and handler_coro == self.handle_gifted_subscription_event:
+                    await handler_coro(parsed_event, raw_payload)
+                else:
+                    await handler_coro(parsed_event) # Pass the whole parsed event model
             except Exception as e:
                 # Log error from specific handler and re-raise to be caught by handle_webhook for 500 response
                 # Use event_type from argument to match test expectation more directly.
@@ -475,14 +480,133 @@ class KickWebhookHandler:
         else:
             logger.info(f"'AwardPoints' for new subscription event is disabled. Skipping points for {subscriber_username}.")
 
-    async def handle_gifted_subscription_event(self, event: GiftedSubscriptionEvent):
+    async def handle_gifted_subscription_event(self, event: GiftedSubscriptionEvent, raw_payload: dict = None):
         if not self.enable_new_webhook_system:
             logger.info(f"New webhook system disabled. Skipping detailed processing for GiftedSubscriptionEvent: {event.id}")
             return
 
         gifter_info = event.data.gifter
-        gifter_username = gifter_info.username if gifter_info and gifter_info.username else "Anonymous"
-        gifter_id = gifter_info.user_id if gifter_info and gifter_info.user_id else "N/A"
+        
+        # Robust gifter information extraction with multiple fallback strategies
+        gifter_username = "Anonymous"
+        gifter_id = "N/A"
+        
+        # CRITICAL DEBUG: Log the complete event structure first
+        logger.info(f"DEBUG: ===== COMPLETE GIFTED SUBSCRIPTION EVENT ANALYSIS =====")
+        
+        # Log the raw webhook payload BEFORE Pydantic processing
+        if raw_payload:
+            logger.info(f"DEBUG: RAW WEBHOOK PAYLOAD (before Pydantic validation): {json.dumps(raw_payload, indent=2)}")
+            
+            # Check if gifter data exists in raw payload
+            raw_gifter = None
+            if 'data' in raw_payload and 'gifter' in raw_payload['data']:
+                raw_gifter = raw_payload['data']['gifter']
+            elif 'gifter' in raw_payload:
+                raw_gifter = raw_payload['gifter']
+                
+            logger.info(f"DEBUG: RAW GIFTER DATA from webhook: {json.dumps(raw_gifter, indent=2) if raw_gifter else 'NOT FOUND'}")
+        else:
+            logger.warning(f"DEBUG: raw_payload not provided to handler")
+        
+        logger.info(f"DEBUG: Full event data (after Pydantic): {event.dict()}")
+        logger.info(f"DEBUG: Event data gifter field: {event.data.gifter}")
+        logger.info(f"DEBUG: Event data giftees field: {event.data.giftees}")
+        
+        if gifter_info:
+            # Enhanced debug logging to see actual gifter data structure
+            logger.info(f"DEBUG: Gifter info structure: {gifter_info}")
+            logger.info(f"DEBUG: Gifter type: {type(gifter_info)}")
+            
+            # Check if it's a Pydantic model and log all fields
+            if hasattr(gifter_info, 'dict'):
+                logger.info(f"DEBUG: Gifter Pydantic dict: {gifter_info.dict()}")
+            if hasattr(gifter_info, '__dict__'):
+                logger.info(f"DEBUG: Gifter __dict__: {gifter_info.__dict__}")
+            
+            # Check all defined fields from GifterInfo model
+            pydantic_fields = ['user_id', 'username', 'is_verified', 'profile_picture', 'channel_slug', 'is_anonymous']
+            logger.info(f"DEBUG: Checking all GifterInfo model fields:")
+            for field in pydantic_fields:
+                try:
+                    value = getattr(gifter_info, field, 'FIELD_NOT_FOUND')
+                    logger.info(f"DEBUG:   {field} = {value} (type: {type(value)})")
+                except Exception as e:
+                    logger.error(f"DEBUG:   {field} = ERROR: {e}")
+        else:
+            logger.warning(f"DEBUG: gifter_info is None/falsy - indicates anonymous gift or missing data")
+        
+        if gifter_info:
+            # Try multiple ways to extract username
+            username_candidates = [
+                getattr(gifter_info, 'username', None),
+                getattr(gifter_info, 'name', None),
+                getattr(gifter_info, 'user_name', None),
+                getattr(gifter_info, 'display_name', None)
+            ]
+            
+            # Try dict-style access if it's a dict-like object
+            if hasattr(gifter_info, '__getitem__'):
+                try:
+                    username_candidates.extend([
+                        gifter_info.get('username'),
+                        gifter_info.get('name'),
+                        gifter_info.get('user_name'),
+                        gifter_info.get('display_name')
+                    ])
+                except:
+                    pass
+            
+            # Find the first non-empty username
+            for candidate in username_candidates:
+                if candidate and str(candidate).strip() and str(candidate).strip().lower() != 'none':
+                    gifter_username = str(candidate).strip()
+                    break
+            
+            # Try multiple ways to extract user_id
+            id_candidates = [
+                getattr(gifter_info, 'user_id', None),
+                getattr(gifter_info, 'id', None),
+                getattr(gifter_info, 'userId', None)
+            ]
+            
+            # Try dict-style access for user_id
+            if hasattr(gifter_info, '__getitem__'):
+                try:
+                    id_candidates.extend([
+                        gifter_info.get('user_id'),
+                        gifter_info.get('id'),
+                        gifter_info.get('userId')
+                    ])
+                except:
+                    pass
+            
+            # Find the first valid user_id
+            for candidate in id_candidates:
+                if candidate is not None and str(candidate).strip() and str(candidate).strip().lower() != 'none':
+                    gifter_id = str(candidate).strip()
+                    break
+            
+            logger.info(f"DEBUG: EXTRACTION RESULT - gifter_username='{gifter_username}', gifter_id='{gifter_id}'")
+            
+            # Log all candidate results for troubleshooting
+            logger.info(f"DEBUG: All username candidates checked: {username_candidates}")
+            logger.info(f"DEBUG: All ID candidates checked: {id_candidates}")
+            
+            # Log all available attributes for debugging
+            if hasattr(gifter_info, '__dict__'):
+                logger.info(f"DEBUG: Gifter attributes: {list(gifter_info.__dict__.keys())}")
+                logger.info(f"DEBUG: Gifter values: {gifter_info.__dict__}")
+                
+            # Additional analysis: check if the model validation might be stripping data
+            logger.info(f"DEBUG: Model validation check - seeing if raw webhook data is being lost:")
+            logger.info(f"DEBUG: gifter_info repr: {repr(gifter_info)}")
+        else:
+            logger.info("DEBUG: Gifter info is None - this is an anonymous gift")
+        
+        # Override to Anonymous if we couldn't extract a valid username
+        if not gifter_username or gifter_username.lower() in ['none', 'null', '']:
+            gifter_username = "Anonymous"
         
         recipients = event.data.giftees
         recipient_usernames = [rec.username for rec in recipients]
@@ -513,15 +637,22 @@ class KickWebhookHandler:
         else:
             logger.info(f"'SendThankYouChatMessage' for gifted subs is disabled. Skipping message for gifter {gifter_username}.")
 
-        # Action 3: Award points to gifter
+        # Action 3: Award points to gifter using existing _handle_gifted_subscriptions method
         if self.award_points_to_gifter_for_gifted_sub and gifter_username != "Anonymous":
-            points_per_sub = self.points_to_gifter_per_sub_for_gifted_sub
-            total_points_for_gifter = points_per_sub * num_gifted
             try:
-                # Placeholder for actual points awarding
-                logger.info(f"AWARD_POINTS_PLACEHOLDER: Would award {total_points_for_gifter} points ({points_per_sub} per sub * {num_gifted} subs) to gifter {gifter_username} (ID: {gifter_id}).")
+                # Call the existing _handle_gifted_subscriptions method that sends !subgift_add command
+                if hasattr(self.kick_bot_instance, '_handle_gifted_subscriptions'):
+                    await self.kick_bot_instance._handle_gifted_subscriptions(gifter_username, num_gifted)
+                    logger.info(f"Awarded points to {gifter_username} for gifting {num_gifted} subs via webhook integration")
+                else:
+                    logger.error(f"_handle_gifted_subscriptions method not available on bot instance")
+                    # Fallback to placeholder logging
+                    points_per_sub = self.points_to_gifter_per_sub_for_gifted_sub
+                    total_points_for_gifter = points_per_sub * num_gifted
+                    logger.info(f"FALLBACK_AWARD_POINTS_PLACEHOLDER: Would award {total_points_for_gifter} points ({points_per_sub} per sub * {num_gifted} subs) to gifter {gifter_username} (ID: {gifter_id}).")
             except Exception as e:
-                logger.error(f"Failed to process point award (gifter) for {gifter_username} for gifted subs: {e}", exc_info=True)
+                logger.error(f"Failed to award points to {gifter_username} for gifted subs via webhook: {e}", exc_info=True)
+                # Continue processing - don't let points failure break webhook acknowledgment
         elif gifter_username == "Anonymous" and self.award_points_to_gifter_for_gifted_sub:
             logger.info(f"Cannot award points to gifter as they are Anonymous. Gifter points awarding for gifted subs is enabled.")
         else:

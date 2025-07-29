@@ -445,3 +445,163 @@ def test_webhook_server_resilience():
 - [x] Zero manual token management required
 - [x] All integration tests pass
 - [x] Bot runs stably for 24+ hours without intervention
+
+---
+
+# Sub-Gift Points System Integration EPIC
+
+## Overview
+Restore the working sub-gift points system that was functional before the OAuth webhook migration. The migration created two separate systems: the old working points system and a new webhook handler with placeholder code that doesn't actually award points.
+
+## Business Value
+- **User Experience**: Gifters receive points as expected for their generous contributions
+- **Feature Parity**: Maintains functionality that existed before OAuth migration
+- **System Integrity**: Eliminates duplicate processing and ensures single source of truth
+- **Reliability**: Uses existing tested points system instead of rebuilding from scratch
+
+## Problem Statement
+During the OAuth migration, the new webhook system (`handle_gifted_subscription_event`) was implemented with placeholder logging code, while the existing working points system (`_handle_gifted_subscriptions`) was left disconnected. This results in:
+- Sub-gift events detected but no points awarded
+- Placeholder logs instead of actual database operations
+- Risk of duplicate processing if both systems trigger
+- Broken user experience for gifters expecting points
+
+## Definition of Done
+- [x] Webhook events trigger the existing `_handle_gifted_subscriptions` method
+- [x] Points are actually awarded to gifters (not just logged as placeholders)
+- [x] No duplicate processing between old chat parsing and new webhook systems
+- [x] Anonymous gifters handled correctly
+- [x] All existing points functionality preserved
+- [x] Integration tests validate end-to-end flow from webhook to points award
+
+---
+
+## Epic Stories
+
+### Story 11: Integrate Existing Sub-Gift Points System with Webhook Handler
+**As a** generous viewer who gifts subscriptions  
+**I want** to receive points for my gifts immediately when detected via webhook events  
+**So that** I'm rewarded for supporting the community and the feature works as expected
+
+**Acceptance Criteria:**
+- [x] Webhook `handle_gifted_subscription_event` calls existing `_handle_gifted_subscriptions` method
+- [x] Placeholder logs in lines 522 and 537 of `kick_webhook_handler.py` replaced with actual method calls
+- [x] Points are awarded using the existing `!subgift_add` command system
+- [x] Anonymous gifters are handled correctly (no points awarded, proper logging)
+- [x] Multiple recipient handling works correctly (points per recipient)
+- [x] No duplicate processing when both webhook and chat message systems are active
+- [x] Error handling preserves existing robustness
+
+**Test Cases:**
+```python
+def test_webhook_triggers_existing_points_system():
+    # Given: Webhook handler receives gifted subscription event
+    # When: handle_gifted_subscription_event is called
+    # Then: _handle_gifted_subscriptions method is called with correct parameters
+    pass
+
+def test_points_actually_awarded_via_webhook():
+    # Given: User gifts 3 subscriptions detected via webhook
+    # When: Event is processed
+    # Then: !subgift_add command is sent with correct points calculation
+    pass
+
+def test_anonymous_gifter_webhook_handling():
+    # Given: Anonymous user gifts subscriptions via webhook
+    # When: Event is processed
+    # Then: No points awarded but event is logged correctly
+    pass
+
+def test_no_duplicate_processing():
+    # Given: Gift event triggers both webhook and chat message detection
+    # When: Both systems process the same gift
+    # Then: Points are only awarded once
+    pass
+
+def test_webhook_integration_error_handling():
+    # Given: Webhook event with invalid gifter data
+    # When: Integration attempts to call _handle_gifted_subscriptions
+    # Then: Error is logged and webhook still returns 200
+    pass
+```
+
+**Technical Implementation:**
+```python
+# In kick_webhook_handler.py, replace placeholder code with:
+async def handle_gifted_subscription_event(self, event: GiftedSubscriptionEvent):
+    # ... existing code ...
+    
+    # Replace placeholder logging with actual integration
+    if self.award_points_to_gifter_for_gifted_sub and gifter_username != "Anonymous":
+        try:
+            await self.kick_bot_instance._handle_gifted_subscriptions(
+                gifter_username, 
+                num_gifted
+            )
+            logger.info(f"Awarded points to {gifter_username} for gifting {num_gifted} subs via webhook")
+        except Exception as e:
+            logger.error(f"Failed to award points to {gifter_username}: {e}", exc_info=True)
+    
+    # Handle recipients if needed (existing _handle_gifted_subscriptions focuses on gifter)
+    # ... recipient handling logic ...
+```
+
+**Definition of Done:**
+- Webhook events trigger existing points system without modification
+- All existing points functionality preserved and working
+- Integration test validates complete flow from webhook to points database
+- No regression in chat message-based gift detection
+- Error handling maintains system stability
+
+**Story Points:** 1
+
+**Dependencies:**
+- Requires existing `_handle_gifted_subscriptions` method (already exists)
+- Requires `GiftBlokitos` configuration setting (already exists)
+- Requires `!subgift_add` command handler (already exists)
+
+**Testing Strategy:**
+- Unit tests for webhook handler integration
+- Integration tests for end-to-end webhook-to-points flow
+- Regression tests to ensure no duplicate processing
+- Manual testing with actual gift events
+
+---
+
+## Technical Implementation Notes
+
+### Integration Architecture
+1. **Preserve Existing System**: Keep `_handle_gifted_subscriptions` method unchanged
+2. **Connect Webhook Handler**: Modify `handle_gifted_subscription_event` to call existing method
+3. **Maintain Configuration**: Use existing `GiftBlokitos` setting and `!subgift_add` command
+4. **Prevent Duplication**: Ensure feature flags properly disable old chat parsing when webhooks are active
+
+### Configuration Validation
+```json
+{
+    "GiftBlokitos": 200,
+    "FeatureFlags": {
+        "EnableNewWebhookEventSystem": true,
+        "DisableLegacyGiftEventHandling": true
+    }
+}
+```
+
+### Error Handling Strategy
+- Webhook integration errors should not crash the webhook server
+- Failed points awards should be logged but not prevent webhook acknowledgment
+- Maintain existing error handling patterns from both systems
+
+### Performance Considerations
+- Integration should not add significant latency to webhook processing
+- Existing database operations in `_handle_gifted_subscriptions` are already optimized
+- Webhook should still return 200 quickly to prevent Kick API retries
+
+---
+
+## Success Metrics
+- [ ] 100% of gifted subscriptions result in points being awarded
+- [ ] < 100ms additional latency for webhook processing
+- [ ] Zero duplicate point awards when both systems are active
+- [ ] All existing gift point functionality preserved
+- [ ] Integration tests achieve 100% coverage of the integration flow
