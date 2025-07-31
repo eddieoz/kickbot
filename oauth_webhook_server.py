@@ -398,10 +398,153 @@ async def send_alert(img, audio, text, tts):
         except Exception as e:
             logger.error(f'Error sending alert: {e}')
 
+class ExtractionResult:
+    """
+    Story 20: Comprehensive result object for username extraction
+    Provides detailed information about the extraction process
+    """
+    def __init__(self, username, success, strategy_used=None, event_type=None, payload=None):
+        self.username = username
+        self.success = success
+        self.strategy_used = strategy_used
+        self.event_type = event_type
+        self.payload = payload
+
+
+class UnifiedUsernameExtractor:
+    """
+    Story 20: Unified, extensible username extraction utility
+    Centralized system for extracting usernames from webhook payloads with strategy pattern
+    """
+    
+    def __init__(self):
+        """Initialize the extractor with default strategies"""
+        self.strategies = {}
+        self._register_default_strategies()
+    
+    def _register_default_strategies(self):
+        """Register default extraction strategies for common event types"""
+        
+        # Follow event strategies
+        self.register_strategy("follow", "follower.username", 
+                             lambda data: data.get('follower', {}).get('username'))
+        self.register_strategy("follow", "user.username",
+                             lambda data: data.get('user', {}).get('username'))
+        self.register_strategy("follow", "username",
+                             lambda data: data.get('username'))
+        
+        # Subscription event strategies
+        self.register_strategy("subscription", "subscriber.username",
+                             lambda data: data.get('subscriber', {}).get('username'))
+        self.register_strategy("subscription", "user.username",
+                             lambda data: data.get('user', {}).get('username'))
+        self.register_strategy("subscription", "username",
+                             lambda data: data.get('username'))
+        
+        # Gift subscription event strategies
+        self.register_strategy("gift_subscription", "gifter.username",
+                             lambda data: data.get('gifter', {}).get('username'))
+        self.register_strategy("gift_subscription", "user.username",
+                             lambda data: data.get('user', {}).get('username'))
+        self.register_strategy("gift_subscription", "username",
+                             lambda data: data.get('username'))
+    
+    def register_strategy(self, event_type, strategy_name, strategy_func):
+        """
+        Register a new extraction strategy for an event type
+        
+        :param event_type: Type of event (follow, subscription, etc.)
+        :param strategy_name: Human-readable name for the strategy
+        :param strategy_func: Function that takes payload and returns username or None
+        """
+        if event_type not in self.strategies:
+            self.strategies[event_type] = []
+        
+        self.strategies[event_type].append({
+            'name': strategy_name,
+            'func': strategy_func
+        })
+        
+        logger.debug(f"Registered strategy '{strategy_name}' for event type '{event_type}'")
+    
+    def extract_username(self, payload, event_type):
+        """
+        Extract username from payload using registered strategies
+        
+        :param payload: Webhook payload data
+        :param event_type: Type of event to determine which strategies to use
+        :return: ExtractionResult object with extraction details
+        """
+        # Get strategies for this event type
+        event_strategies = self.strategies.get(event_type, [])
+        
+        # If no specific strategies, try generic strategies
+        if not event_strategies:
+            event_strategies = self.strategies.get("follow", [])  # Use follow as fallback
+        
+        # Try each strategy in order
+        for strategy in event_strategies:
+            try:
+                username = strategy['func'](payload)
+                if self._is_valid_username(username):
+                    logger.debug(f"Username '{username}' extracted using strategy '{strategy['name']}' for {event_type}")
+                    return ExtractionResult(
+                        username=username,
+                        success=True,
+                        strategy_used=strategy['name'],
+                        event_type=event_type,
+                        payload=payload
+                    )
+            except (KeyError, AttributeError, TypeError) as e:
+                logger.debug(f"Strategy '{strategy['name']}' failed for {event_type}: {e}")
+                continue
+        
+        # All strategies failed
+        logger.warning(f"Failed to extract username from {event_type} payload: {payload}")
+        return ExtractionResult(
+            username="Unknown",
+            success=False,
+            strategy_used=None,
+            event_type=event_type,
+            payload=payload
+        )
+    
+    def _is_valid_username(self, username):
+        """
+        Validate that a username is acceptable
+        
+        :param username: Username to validate
+        :return: True if valid, False otherwise
+        """
+        if username is None:
+            return False
+        if not isinstance(username, str):
+            return False
+        if not username.strip():  # Empty or whitespace-only
+            return False
+        return True
+
+
+# Global instance for backward compatibility and easy access
+unified_extractor = UnifiedUsernameExtractor()
+
+
+def extract_username_from_payload(event_data, event_type="follow"):
+    """
+    Story 20: Backward-compatible wrapper for the unified extractor
+    Extract username from webhook payload using the unified extraction utility
+    
+    :param event_data: Webhook payload data
+    :param event_type: Type of event (follow, subscription, etc.)
+    :return: Username string (for backward compatibility)
+    """
+    result = unified_extractor.extract_username(event_data, event_type)
+    return result.username
+
 async def handle_follow_event(event_data):
-    """Handle follow events"""
+    """Handle follow events with robust username extraction (Story 17)"""
     try:
-        follower_name = event_data.get('follower', {}).get('username', 'Unknown')
+        follower_name = extract_username_from_payload(event_data, "follow")
         logger.info(f"🎉 New follower: {follower_name}")
         
         # Send follow alert
@@ -414,11 +557,38 @@ async def handle_follow_event(event_data):
     except Exception as e:
         logger.error(f"Error handling follow event: {e}")
 
+def extract_tier_from_payload(event_data):
+    """
+    Story 18: Robust tier extraction with multiple strategies
+    Extract subscription tier from webhook payload using multiple fallback strategies
+    """
+    tier_strategies = [
+        lambda data: data.get('tier'),                          # Standard field
+        lambda data: data.get('subscription_tier'),             # Alternative field  
+        lambda data: data.get('level'),                         # Level field
+        lambda data: data.get('subscription', {}).get('tier'),  # Nested structure
+        lambda data: data.get('sub_tier'),                      # Another alternative
+    ]
+    
+    for strategy in tier_strategies:
+        try:
+            tier = strategy(event_data)
+            if tier is not None and isinstance(tier, (int, str)):
+                tier_value = int(tier)
+                if 1 <= tier_value <= 10:  # Reasonable tier range
+                    logger.debug(f"Tier extracted: {tier_value}")
+                    return tier_value
+        except (KeyError, AttributeError, TypeError, ValueError):
+            continue
+    
+    logger.debug("No tier found in payload, defaulting to tier 1")
+    return 1  # Default tier
+
 async def handle_subscription_event(event_data):
-    """Handle subscription events"""
+    """Handle subscription events with robust username and tier extraction (Story 18)"""
     try:
-        subscriber_name = event_data.get('subscriber', {}).get('username', 'Unknown')
-        tier = event_data.get('tier', 1)
+        subscriber_name = extract_username_from_payload(event_data, "subscription")
+        tier = extract_tier_from_payload(event_data)
         logger.info(f"🎉 New subscription: {subscriber_name} (Tier {tier})")
         
         # Send subscription alert
@@ -1565,8 +1735,8 @@ async def handle_kick_events(request):
             if all(key in event_data for key in ['message_id', 'broadcaster', 'sender', 'content']):
                 event_type = 'chat.message.sent'
                 logger.info(f"✅ Detected chat message from structure: {event_data.get('sender', {}).get('username', 'unknown')} -> {event_data.get('content', '')}")
-            # Check for follow structure
-            elif 'follower' in event_data and 'followed_at' in event_data:
+            # Check for follow structure - real Kick webhooks have 'follower' and 'broadcaster'
+            elif 'follower' in event_data and 'broadcaster' in event_data:
                 event_type = 'channel.followed'
             # Check for subscription structure
             elif 'subscriber' in event_data and ('subscribed_at' in event_data or 'gifted_subscriptions' in event_data):
@@ -1578,15 +1748,18 @@ async def handle_kick_events(request):
         # Dispatch events to appropriate handlers
         try:
             if event_type == 'channel.followed':
-                await handle_follow_event(event_data.get('data', {}))
+                # PRODUCTION FIX: Pass full event_data since real webhooks don't have 'data' wrapper
+                await handle_follow_event(event_data)
             elif event_type == 'channel.subscription.new':
-                await handle_subscription_event(event_data.get('data', {}))
+                # PRODUCTION FIX: Pass full event_data since real webhooks don't have 'data' wrapper
+                await handle_subscription_event(event_data)
             elif event_type == 'channel.subscription.gifts':
                 # STORY 13: Pass full event_data and headers to robust parser
                 # Don't extract 'data' field since Story 12 showed payloads are often empty
                 await handle_gift_subscription_event(event_data, dict(request.headers))
             elif event_type == 'channel.subscription.renewal':
-                await handle_subscription_event(event_data.get('data', {}))  # Reuse subscription handler
+                # PRODUCTION FIX: Pass full event_data since real webhooks don't have 'data' wrapper
+                await handle_subscription_event(event_data)
             elif event_type == 'chat.message.sent':
                 # Process chat messages and execute bot commands
                 # For direct message payload structure, pass the entire event_data

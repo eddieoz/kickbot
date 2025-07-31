@@ -1157,6 +1157,7 @@ class KickBot:
     async def _handle_gifted_subscriptions(self, gifter: str, amount: int) -> None:
         """
         Handles incoming gifted subscriptions events, adds blokitos to the gifter's account and logs the event.
+        Story 19: Updated to use OAuth-compatible chat messaging for webhook integration.
 
         :param gifter: Username of the gifter
         :param amount: Number of subscriptions gifted
@@ -1169,13 +1170,52 @@ class KickBot:
             if 'GiftBlokitos' in settings and settings['GiftBlokitos'] != 0:
                 blokitos = amount * settings['GiftBlokitos']
                 message = f'!subgift_add {gifter} {blokitos}'
-                r = send_message_in_chat(self, message)
-                if r.status_code != 200:
-                    self.logger.error(f"Error sending message for gift subs: {r.status_code} - {r.text}")
-                else:
+                
+                # Story 19: Use OAuth-compatible chat messaging for webhook bots
+                success = await self._send_chat_message_oauth_compatible(message)
+                
+                if success:
                     self.logger.info(f"Added {blokitos} to user {gifter} for {amount} sub_gifts")
+                else:
+                    self.logger.error(f"Failed to send gift subscription message for {gifter}")
         except Exception as e:
             self.logger.error(f"Error handling gifted subscriptions: {e}", exc_info=True)
+    
+    async def _send_chat_message_oauth_compatible(self, message: str) -> bool:
+        """
+        Story 19: OAuth-compatible chat message sending with fallback to legacy method.
+        
+        :param message: Message to send in chat
+        :return: True if message was sent successfully, False otherwise
+        """
+        try:
+            # Try OAuth-compatible method first (for webhook bots)
+            if hasattr(self, 'auth_manager') and self.auth_manager:
+                from kickbot.kick_helper import send_message_in_chat_async
+                await send_message_in_chat_async(self, message)
+                return True
+                
+            # Try async method with aiohttp session (for hybrid bots)
+            elif hasattr(self, 'http_session') and self.http_session:
+                from kickbot.kick_helper import send_message_in_chat_async
+                await send_message_in_chat_async(self, message)  
+                return True
+                
+            # Fallback to legacy method (for traditional bots)
+            elif hasattr(self, 'client') and self.client and hasattr(self.client, 'xsrf'):
+                r = send_message_in_chat(self, message)
+                if r.status_code == 200:
+                    return True
+                else:
+                    self.logger.error(f"Legacy chat API error: {r.status_code} - {r.text}")
+                    return False
+            else:
+                self.logger.error("No compatible chat messaging method available")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error sending chat message '{message}': {e}", exc_info=True)
+            return False
 
     def generate(self, msg: list = None) -> tuple:
         """Generate a Markov chain message.
