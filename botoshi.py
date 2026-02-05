@@ -186,7 +186,7 @@ async def im_back(bot: KickBot):
 
 # Sound alerts
 async def sons_alert (bot: KickBot, message: KickMessage):
-    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem !laele !chato !farao !bobtalik"
+    reply = "Comandos de som: !aplauso !creptomoeda !nani !secnagem !no !rica !run !tistreza !burro !zero !what !doida !risada !vergonha !certo !triste !cadeira !inveja !didi !elon !safado !viagem !laele !chato !farao !bobtalik !powelber !mammamia"
     await bot.send_text(reply)
 
 async def aplauso_alert (bot: KickBot, message: KickMessage):
@@ -271,6 +271,12 @@ async def pharaoh_alert (bot: KickBot, message: KickMessage):
 async def bobtalik_alert (bot: KickBot, message: KickMessage):
     await send_alert('https://www.eddieoz.com/content/images/2025/07/Bobtalik-1.gif', 'https://www.eddieoz.com/content/media/2025/07/bobtalik.mp3', '', '')
 
+async def powelber_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://www.eddieoz.com/content/images/2025/08/po_welber.gif', 'https://www.myinstants.com/media/sounds/po-welber.mp3', '', '', 3000)
+
+async def mammamia_alert (bot: KickBot, message: KickMessage):
+    await send_alert('https://www.eddieoz.com/content/images/2026/02/mamma-mia.gif', 'https://www.myinstants.com/media/sounds/mamma-mia-marcello-2.mp3', '', '')
+
 
 
 async def msg_alert (bot: KickBot, message: KickMessage):
@@ -298,7 +304,7 @@ async def switch_alert(bot: KickBot, message: KickMessage):
             reply = 'Alerts disabled!'
         await bot.reply_text(message, str(reply))
 
-async def send_alert(img, audio, text, tts):
+async def send_alert(img, audio, text, tts, duration=9000):
     if (settings['Alerts']['Enable']):
         try:
             async with aiohttp.ClientSession() as session:
@@ -308,7 +314,7 @@ async def send_alert(img, audio, text, tts):
                 color = 'gold'
                 borderColor = 'black'
                 borderWidth = 2
-                duration = 9000
+                # duration = 9000
                 parameters = f'/trigger_alert?gif={img}&audio={quote_plus(audio)}&text={text}&tts={tts}&width={width}&fontFamily={fontFamily}&fontSize={fontSize}&borderColor={borderColor}&borderWidth={borderWidth}&color={color}&duration={duration}'
                 url = settings['Alerts']['Host'] + parameters + '&api_key=' + settings['Alerts']['ApiKey']
                 # alert = requests.get(url)
@@ -397,6 +403,8 @@ async def main():
     bot.add_command_handler('!chato', chato_alert)
     bot.add_command_handler('!farao', pharaoh_alert)
     bot.add_command_handler('!bobtalik', bobtalik_alert)
+    bot.add_command_handler('!powelber', powelber_alert)
+    bot.add_command_handler('!mammamia', mammamia_alert)
 
     bot.add_message_handler('bom dia', morning_greeting)
     bot.add_message_handler('boa tarde', afternoon_greeting)

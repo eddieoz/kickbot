@@ -638,7 +638,12 @@ class KickWebhookHandler:
             logger.info(f"'SendThankYouChatMessage' for gifted subs is disabled. Skipping message for gifter {gifter_username}.")
 
         # Action 3: Award points to gifter using existing _handle_gifted_subscriptions method
-        if self.award_points_to_gifter_for_gifted_sub and gifter_username != "Anonymous":
+        # Skip if unified webhook server is handling points to avoid duplication
+        disable_internal_webhook = getattr(self.kick_bot_instance, 'settings', {}).get('FeatureFlags', {}).get('DisableInternalWebhookServer', False)
+        
+        if disable_internal_webhook:
+            logger.info(f"Skipping internal webhook point awarding for {gifter_username} - unified webhook server is handling points")
+        elif self.award_points_to_gifter_for_gifted_sub and gifter_username != "Anonymous":
             try:
                 # Call the existing _handle_gifted_subscriptions method that sends !subgift_add command
                 if hasattr(self.kick_bot_instance, '_handle_gifted_subscriptions'):

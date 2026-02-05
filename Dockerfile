@@ -27,6 +27,9 @@ COPY environment.yml .
 
 # Create the Conda environment from the environment.yml file
 # This will also install pip packages listed in environment.yml
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
 RUN conda env create -f environment.yml && \
     conda clean -afy
 

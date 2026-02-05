@@ -1168,16 +1168,18 @@ class KickBot:
             
         try:
             if 'GiftBlokitos' in settings and settings['GiftBlokitos'] != 0:
+
                 blokitos = amount * settings['GiftBlokitos']
-                message = f'!subgift_add {gifter} {blokitos}'
+                self.logger.info(f"Tried to add {blokitos} to user {gifter} for {amount} sub_gifts through old method")
+            #     message = f'!subgift_add {gifter} {blokitos}'
                 
-                # Story 19: Use OAuth-compatible chat messaging for webhook bots
-                success = await self._send_chat_message_oauth_compatible(message)
+            #     # Story 19: Use OAuth-compatible chat messaging for webhook bots
+            #     success = await self._send_chat_message_oauth_compatible(message)
                 
-                if success:
-                    self.logger.info(f"Added {blokitos} to user {gifter} for {amount} sub_gifts")
-                else:
-                    self.logger.error(f"Failed to send gift subscription message for {gifter}")
+            #     if success:
+            #         self.logger.info(f"Added {blokitos} to user {gifter} for {amount} sub_gifts")
+            #     else:
+            #         self.logger.error(f"Failed to send gift subscription message for {gifter}")
         except Exception as e:
             self.logger.error(f"Error handling gifted subscriptions: {e}", exc_info=True)
     
