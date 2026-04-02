@@ -25,6 +25,12 @@ WORKDIR /app
 # Copy the Conda environment file
 COPY environment.yml .
 
+# Accept conda TOS
+RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r && \
+    conda env create -f environment.yml && \
+    conda clean -afy
+
 # Create the Conda environment from the environment.yml file
 # This will also install pip packages listed in environment.yml
 RUN conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main && \
